@@ -1,4 +1,3 @@
-
 // Based on code from tauri-plugin-fs crate
 //
 // Source:

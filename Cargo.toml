@@ -1,12 +1,16 @@
 [package]
 name = "tauri-plugin-fs-stream"
 version = "0.1.0"
-authors = [ "OkaYu" ]
-description = ""
+authors = ["OkaYu"]
+description = "API for creating file stream"
 edition = "2021"
 rust-version = "1.77.2"
-exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+exclude = ["/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-fs-stream"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/aiueo13/tauri-plugin-fs-stream"
+readme = "README.md"
+keywords = ["tauri", "plugin", "file", "fs", "stream"]
 
 [dependencies]
 tauri = { version = "2", default-features = false }
