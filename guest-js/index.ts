@@ -456,8 +456,8 @@ async function createTextLinesReadableStream(
 		fatal?: boolean,
 		label?: string,
 	}
-): Promise<ReadableStream<{ 
-	line: string, 
+): Promise<ReadableStream<{
+	line: string,
 	lineBreak: "\n" | "\r\n" | null
 }>> {
 
@@ -544,7 +544,7 @@ async function createTextLinesReadableStream(
 				else if (lineBreakType === LINE_BREAK_CRLF) lineBreak = "\r\n"
 				else if (lineBreakType === LINE_BREAK_NULL) lineBreak = null
 				else throw new Error(`Invalid lineBreakType: ${lineBreakType}`)
-				
+
 				if (decoder == null) {
 					decoder = new TextDecoder(options?.label, {
 						fatal: options?.fatal,
@@ -552,7 +552,7 @@ async function createTextLinesReadableStream(
 					})
 				}
 				const line = decoder.decode(lineBytes)
-				
+
 				controller.enqueue({ line, lineBreak })
 				buffer = buffer.subarray(LINE_OFFSET + lineLen)
 			}
