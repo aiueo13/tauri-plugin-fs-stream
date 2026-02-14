@@ -218,7 +218,7 @@ export type OpenWriteFileStreamOptions = {
 	 * 
 	 * Defaults to `false`.
 	 */
-  append?: boolean,
+	append?: boolean,
 
 	/**
 	 * Indicates whether a new file should be created if it does not exist.
@@ -303,7 +303,7 @@ export async function openWriteFileStream(
  * Forcibly disposes all file streams.
  *
  * Releases all backend file resources owned by `ReadableStream` and `WritableStream`
- * instances created by `tauri-plugin-fs-stream`.
+ * instances created by this plugin.
  * 
  * After this operation, any read or write operation on existing streams will result in an error, 
  * except for buffering on the frontend.
@@ -435,7 +435,7 @@ async function resolveWriteFileStreamEvents(
 	return {
 		open: async () => {
 			if (id !== null) throw new Error("File already opened")
-			const idNum = await dispatch("Open", { path, options: JSON.stringify(options)}, {})
+			const idNum = await dispatch("Open", { path, options: JSON.stringify(options) }, {})
 			id = idNum.toString()
 		},
 

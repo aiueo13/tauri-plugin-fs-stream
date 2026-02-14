@@ -6,21 +6,29 @@ use std::io::Read as _;
 #[tauri::command]
 pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
     event: OpenReadTextFileLinesStreamEventInput,
-    app: tauri::AppHandle<R>,
+    webview: tauri::Webview<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
     resources: PluginResourcesState<'_, R>,
+    config: PluginConfigState<'_>,
 ) -> Result<tauri::ipc::Response> {
 
     type FileResource = PluginResource<std::sync::Mutex<FileResourceInner>>;
 
 
     let resources = std::sync::Arc::clone(&resources);
+    let config = std::sync::Arc::clone(&config);
 
     match event {
         OpenReadTextFileLinesStreamEventInput::Open { path, base_dir, label, max_line_len, ignore_bom } => {
-            let path = resolve_path(base_dir, path, &app)?;
-            validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;
+            let path = resolve_path(
+                &webview,
+                &global_scope, 
+                &cmd_scope,
+                &config,
+                path,
+                base_dir
+            )?;
 
             tauri::async_runtime::spawn_blocking(move || {
                 let file = std::fs::File::open(&path)?;

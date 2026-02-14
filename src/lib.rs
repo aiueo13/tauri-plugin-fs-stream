@@ -1,15 +1,25 @@
 mod cmds;
+mod config;
 mod error;
+mod state;
 
-pub use error::{Error, Result};
+use error::*;
+use state::*;
 
 
 /// Initializes the plugin.
-pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-	tauri::plugin::Builder::new("fs-stream")
-		.setup(|app, _| {
+pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R, Option<config::Config>> {
+	tauri::plugin::Builder::<R, Option<config::Config>>::new("fs-stream")
+		.setup(|app, api| {
 			use tauri::Manager as _;
-			app.manage(cmds::plugin_resources_state(app.app_handle().clone()));
+
+			let require_literal_leading_dot = api
+				.config()
+				.as_ref()
+                .and_then(|c| c.require_literal_leading_dot);
+
+			app.manage(new_plugin_config_state(require_literal_leading_dot));
+			app.manage(new_plugin_resources_state(app.app_handle().clone()));
 			Ok(())
 		})
 		.invoke_handler(tauri::generate_handler![

@@ -6,22 +6,30 @@ use std::io::Write as _;
 #[tauri::command]
 pub async fn open_write_file_stream<R: tauri::Runtime>(
     req: tauri::ipc::Request<'_>,
-    app: tauri::AppHandle<R>,
+    webview: tauri::Webview<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
     resources: PluginResourcesState<'_, R>,
+    config: PluginConfigState<'_>,
 ) -> Result<OpenWriteFileStreamEventOutput> {
 
     type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
 
     
     let resources = std::sync::Arc::clone(&resources);
+    let config = std::sync::Arc::clone(&config);
     let event: OpenWriteFileStreamEventInput = req.try_into()?;
 
     match event {
         OpenWriteFileStreamEventInput::Open { path, options } => {
-            let path = resolve_path(options.base_dir, path, &app)?;
-            validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;
+            let path = resolve_path(
+                &webview,
+                &global_scope, 
+                &cmd_scope,
+                &config,
+                path,
+                options.base_dir
+            )?;
 
             tauri::async_runtime::spawn_blocking(move || {
                 let file_options: std::fs::OpenOptions = (&options).into();
