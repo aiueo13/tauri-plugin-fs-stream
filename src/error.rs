@@ -21,8 +21,8 @@ impl crate::Error {
         Self::with(format!("missing value: {value_name}"))
     }
 
-    pub fn invalid_type(type_name: impl std::fmt::Display) -> Self {
-        Self::with(format!("invalid type for {type_name}"))
+    pub fn invalid_type(value_name: impl std::fmt::Display) -> Self {
+        Self::with(format!("invalid type for {value_name}"))
     }
 
     pub fn invalid_value(value_name: impl std::fmt::Display, value: impl std::fmt::Display) -> Self {

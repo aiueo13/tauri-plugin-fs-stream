@@ -7,10 +7,16 @@ pub use error::{Error, Result};
 /// Initializes the plugin.
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 	tauri::plugin::Builder::new("fs-stream")
+		.setup(|app, _| {
+			use tauri::Manager as _;
+			app.manage(cmds::plugin_resources_state(app.app_handle().clone()));
+			Ok(())
+		})
 		.invoke_handler(tauri::generate_handler![
 			cmds::open_read_file_stream,
 			cmds::open_read_text_file_lines_stream,
 			cmds::open_write_file_stream,
+			cmds::close_all_file_streams,
 		])
 		.js_init_script(format!(
             "window.__TAURI_FS_STREAM_PLUGIN_INTERNALS__ = {{ supportsRawIpcRequestBody: {} }};",

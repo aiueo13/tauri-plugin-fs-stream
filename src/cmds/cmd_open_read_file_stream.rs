@@ -1,6 +1,5 @@
 use crate::*;
 use super::*;
-use tauri::Manager as _;
 use std::io::Read as _;
 
 
@@ -10,49 +9,66 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
+    resources: PluginResourcesState<'_, R>,
 ) -> Result<tauri::ipc::Response> {
 
-    type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
+    type FileResource = PluginResource<std::sync::Mutex<FileResourceInner>>;
+
     
+    let resources = std::sync::Arc::clone(&resources);
     
     match event {
-        OpenReadFileStreamEventInput::Open { path } => {
+        OpenReadFileStreamEventInput::Open { path, base_dir } => {
+            let path = resolve_path(base_dir, path, &app)?;
             validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;
             
             tauri::async_runtime::spawn_blocking(move || {
                 let file = std::fs::File::open(&path)?;
-                let id = app
-                    .resources_table()
-                    .add(FileResource::new(std::sync::Mutex::new(file)));
-
-                Ok(OpenReadFileStreamEventOutput::Open(id).try_into()?)
+                let len = file.metadata()?.len();
+                let res = FileResourceInner {
+                    file, 
+                    init_file_len: len,
+                    read: 0
+                };
+                let id = resources.add(FileResource::new(std::sync::Mutex::new(res)))?;
+                OpenReadFileStreamEventOutput::Open(id).try_into()
             }).await?
         },
         OpenReadFileStreamEventInput::Read { id, len } => {
             tauri::async_runtime::spawn_blocking(move || -> Result<_> {
-                let file = app.resources_table().get::<FileResource>(id)?.get();
-                let mut file = file.lock()?;
+                let state = resources.get::<FileResource>(id)?.get();
+                let mut state = state.lock()?;
                 
-                let init_cap = usize::min(len as usize, 2 * 1024 * 1024);
-                let mut buf = Vec::with_capacity(init_cap);
-                
-                file.by_ref()
-                    .take(len)
+                if state.init_file_len <= state.read {
+                    return OpenReadFileStreamEventOutput::Read(Vec::new()).try_into();
+                }
+
+                let n = u64::min(len, state.init_file_len - state.read);
+                let mut buf = Vec::with_capacity(usize::min(n as usize, 2 * 1024 * 1024));
+
+                state.file
+                    .by_ref()
+                    .take(n)
                     .read_to_end(&mut buf)?;
 
-                Ok(OpenReadFileStreamEventOutput::Read(buf).try_into()?)
+                state.read += buf.len() as u64;
+
+                OpenReadFileStreamEventOutput::Read(buf).try_into()
             }).await?
         },
         OpenReadFileStreamEventInput::Close { id } => {
             tauri::async_runtime::spawn_blocking(move || {
-                let mut resources = app.resources_table();
-                if resources.has(id) {
-                    resources.close(id)?;
-                }
-                Ok(OpenReadFileStreamEventOutput::Close(()).try_into()?)
+                resources.close(id)?;
+                OpenReadFileStreamEventOutput::Close(()).try_into()
             }).await?
         },
     }
+}
+
+struct FileResourceInner {
+    file: std::fs::File,
+    init_file_len: u64,
+    read: u64,
 }
 
 
@@ -61,6 +77,9 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
 pub enum OpenReadFileStreamEventInput {
     Open {
         path: String,
+
+        #[serde(rename = "baseDir")]
+        base_dir: Option<tauri::path::BaseDirectory>
     },
     Read {
         id: tauri::ResourceId,

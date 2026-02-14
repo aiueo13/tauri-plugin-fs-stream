@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { BaseDirectory } from '@tauri-apps/api/path'
 
 
 export type OpenReadFileStreamOptions = {
@@ -15,21 +16,16 @@ export type OpenReadFileStreamOptions = {
 	bufferByteLength?: number,
 
 	/**
-	 * Whether the underlying file is opened lazily.
-	 * 
-	 * - `true`: The file descriptor is acquired only during the first read operation. Opening errors will be emitted through the stream instead of the initial call.
-	 * - `false` : The file is opened immediately. Any initial errors (e.g., File Not Found, Permission Denied) will cause `openReadFileStream` to reject.
-	 * 
-	 * Defaults to `false`
+	 * Base directory for `path`.
 	 */
-	lazyOpen?: boolean
+	baseDir?: BaseDirectory
 }
 
 /**
  * Opens the file with read-only mode and resolves to a `ReadableStream`.  
  * 
  * The returned `ReadableStream` must always be released by the caller.
- * Failure to do so may cause file descriptor resource leaks.
+ * Failure to do so may cause file resource leaks.
  * The returned ReadableStream is released in the following cases:
  * - When the ReadableStream or its Reader is canceled. 
  * - When the ReadableStream's Reader has been fully read. 
@@ -37,10 +33,10 @@ export type OpenReadFileStreamOptions = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to read.
- * @param options - Optional settings: `bufferByteLength`, `lazyOpen`. See {@linkcode OpenReadFileStreamOptions} for detailed descriptions of each item.
+ * @param path - The file path to read. 
+ * @param options - Optional settings: `bufferByteLength`, `baseDir`. See {@linkcode OpenReadFileStreamOptions} for detailed descriptions of each item.
  * 
- * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the file descriptor.
+ * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openReadFileStream(
 	path: string,
@@ -48,11 +44,10 @@ export async function openReadFileStream(
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
 
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
-	const lazyOpen = options?.lazyOpen ?? false
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_file_stream",
 		path,
-		lazyOpen
+		{ baseDir: options?.baseDir }
 	)
 
 	try {
@@ -128,14 +123,9 @@ export type OpenReadTextFileLinesStreamOptions = {
 	maxLineByteLength?: number,
 
 	/**
-	 * Whether the underlying file is opened lazily.
-	 * 
-	 * - `true`: The file descriptor is acquired only during the first read operation. Opening errors will be emitted through the stream instead of the initial call.
-	 * - `false` : The file is opened immediately. Any initial errors (e.g., File Not Found, Permission Denied) will cause `openReadTextFileLinesStream` to reject.
-	 * 
-	 * Defaults to `false`
+	 * Base directory for `path`.
 	 */
-	lazyOpen?: boolean
+	baseDir?: BaseDirectory,
 }
 
 export type OpenReadTextFileLinesStreamItem = {
@@ -164,7 +154,7 @@ export type OpenReadTextFileLinesStreamItem = {
  * See: {@linkcode OpenReadTextFileLinesStreamItem}.
  * 
  * The returned `ReadableStream` must always be released by the caller.
- * Failure to do so may cause file descriptor resource leaks.
+ * Failure to do so may cause file resource leaks.
  * The returned ReadableStream is released in the following cases:
  * - When the ReadableStream or its Reader is canceled. 
  * - When the ReadableStream's Reader has been fully read. 
@@ -172,10 +162,10 @@ export type OpenReadTextFileLinesStreamItem = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to read.
- * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `lazyOpen`. See {@linkcode OpenReadTextFileLinesStreamOptions} for detailed descriptions of each item.
+ * @param path - The file path to read. 
+ * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `baseDir`. See {@linkcode OpenReadTextFileLinesStreamOptions} for detailed descriptions of each item.
  * 
- * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the file descriptor.
+ * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openReadTextFileLinesStream(
 	path: string,
@@ -187,11 +177,10 @@ export async function openReadTextFileLinesStream(
 	const label = mapEncodingLabelForInput(options?.encoding)
 	const fatal = options?.fatal ?? false
 	const ignoreBOM = options?.ignoreBOM ?? false
-	const lazyOpen = options?.lazyOpen ?? false
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_text_file_lines_stream",
 		path,
-		lazyOpen
+		{ baseDir: options?.baseDir }
 	)
 
 	try {
@@ -225,21 +214,46 @@ export type OpenWriteFileStreamOptions = {
 	bufferByteLength?: number,
 
 	/**
-	 * Whether the underlying file is opened lazily.
+	 * Indicates whether the data should be appended from the end of the file instead of overwriting the existing content.
 	 * 
-	 * - `true`: The file descriptor is acquired only during the first write operation. Opening errors will be emitted through the stream instead of the initial call.
-	 * - `false` : The file is opened immediately. Any initial errors (e.g., File Not Found, Permission Denied) will cause `openWriteFileStream` to reject.
-	 * 
-	 * Defaults to `false`
+	 * Defaults to `false`.
 	 */
-	lazyOpen?: boolean
+  append?: boolean,
+
+	/**
+	 * Indicates whether a new file should be created if it does not exist.
+	 * 
+	 * Defaults to `true`.
+	 */
+	create?: boolean,
+
+	/**
+	 * Indicates whether a new file must be created. 
+	 * In other words, whether an error should be raised if the file already exists.
+	 * 
+	 * Defaults to `false`.
+	 */
+	createNew?: boolean,
+
+	/**
+	 * The file mode bits for creating a new file.
+	 * Ignored on Windows.
+	 * 
+	 * See: <https://doc.rust-lang.org/std/os/unix/fs/trait.OpenOptionsExt.html#tymethod.mode>
+	 */
+	mode?: number,
+
+	/**
+	 * Base directory for `path`.
+	 */
+	baseDir?: BaseDirectory
 }
 
 /**
  * Opens the file with write-only mode and resolves to a `WritableStream`.  
  * 
  * The returned `WritableStream` must always be released by the caller.
- * Failure to do so may cause file descriptor resource leaks.
+ * Failure to do so may cause file resource leaks.
  * The returned WritableStream is released in the following cases:
  * - When the WritableStream or its Writer is closed. 
  * - When the WritableStream or its Writer is aborted. 
@@ -247,10 +261,10 @@ export type OpenWriteFileStreamOptions = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to write to.
- * @param options - Optional settings: `bufferByteLength`, `lazyOpen`. See {@linkcode OpenWriteFileStreamOptions} for detailed descriptions of each item.
+ * @param path - The file path to write to. 
+ * @param options - Optional settings: `bufferByteLength`, `append`, `create`, `createNew`, `mode`, `baseDir`. See {@linkcode OpenWriteFileStreamOptions} for detailed descriptions of each item.
  * 
- * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the file descriptor.
+ * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openWriteFileStream(
 	path: string,
@@ -258,11 +272,17 @@ export async function openWriteFileStream(
 ): Promise<WritableStream<Uint8Array<ArrayBufferLike>>> {
 
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
-	const lazyOpen = options?.lazyOpen ?? false
+	const fileOptions = {
+		append: options?.append ?? false,
+		create: options?.create ?? true,
+		createNew: options?.createNew ?? false,
+		mode: options?.mode,
+		baseDir: options?.baseDir
+	}
 	const { open, write, close } = await resolveWriteFileStreamEvents(
 		"plugin:fs-stream|open_write_file_stream",
 		path,
-		lazyOpen
+		fileOptions,
 	)
 
 	try {
@@ -276,6 +296,20 @@ export async function openWriteFileStream(
 		await close().catch(() => { })
 		throw e
 	}
+}
+
+
+/**
+ * Forcibly disposes all file streams.
+ *
+ * Releases all backend file resources owned by `ReadableStream` and `WritableStream`
+ * instances created by `tauri-plugin-fs-stream`.
+ * 
+ * After this operation, any read or write operation on existing streams will result in an error, 
+ * except for buffering on the frontend.
+ */
+export async function closeAllFileStreams(): Promise<void> {
+	await invoke("plugin:fs-stream|close_all_file_streams")
 }
 
 
@@ -326,11 +360,13 @@ type ReadFileStreamEvents = {
 async function resolveReadFileStreamEvents(
 	cmd: string,
 	path: string,
-	lazyOpen: boolean
+	options: {
+		baseDir?: BaseDirectory
+	}
 ): Promise<ReadFileStreamEvents> {
 
 	type CmdEvents = {
-		Open: { path: string },
+		Open: { path: string, baseDir?: BaseDirectory },
 		Read: { id: number, len: number },
 		Close: { id: number },
 	}
@@ -344,26 +380,21 @@ async function resolveReadFileStreamEvents(
 	let id: number | null = null
 
 	return {
-		open: async (options) => {
+		open: async (ops) => {
 			if (id !== null) throw new Error("File already opened")
-			if (lazyOpen) return
-			const idBytes = await dispatch("Open", { ...options, path })
+			const idBytes = await dispatch("Open", { ...ops, path, baseDir: options.baseDir })
 			id = ridFromBytes(idBytes)
 		},
 
-		read: async (len, options) => {
-			if (id === null) {
-				if (!lazyOpen) throw new Error("File not opened")
-				const idBytes = await dispatch("Open", { ...options, path })
-				id = ridFromBytes(idBytes)
-			}
-			const data = await dispatch("Read", { ...options, id, len, })
+		read: async (len, ops) => {
+			if (id === null) throw new Error("File not opened")
+			const data = await dispatch("Read", { ...ops, id, len, })
 			return data.byteLength === 0 ? null : new Uint8Array(data)
 		},
 
-		close: async (options) => {
+		close: async (ops) => {
 			if (id === null) return
-			await dispatch("Close", { ...options, id })
+			await dispatch("Close", { ...ops, id })
 		}
 	}
 }
@@ -376,11 +407,17 @@ type WriteFileStreamEvents = {
 async function resolveWriteFileStreamEvents(
 	cmd: string,
 	path: string,
-	lazyOpen: boolean
+	options: {
+		append: boolean,
+		create: boolean,
+		createNew: boolean,
+		mode?: number,
+		baseDir?: BaseDirectory
+	}
 ): Promise<WriteFileStreamEvents> {
 
 	type CmdEvents = {
-		Open: { body: {}, headers: { path: string }, out: number },
+		Open: { body: { path: string, options: string }, headers: {}, out: number },
 		Write: { body: Uint8Array | { data: string }, headers: { id: string }, out: void },
 		Close: { body: {}, headers: { id: string }, out: void },
 	}
@@ -398,17 +435,12 @@ async function resolveWriteFileStreamEvents(
 	return {
 		open: async () => {
 			if (id !== null) throw new Error("File already opened")
-			if (lazyOpen) return
-			const idNum = await dispatch("Open", {}, { path: encodeURIComponent(path) })
+			const idNum = await dispatch("Open", { path, options: JSON.stringify(options)}, {})
 			id = idNum.toString()
 		},
 
 		write: async (chunk) => {
-			if (id === null) {
-				if (!lazyOpen) throw new Error("File not opened")
-				const idNum = await dispatch("Open", {}, { path: encodeURIComponent(path) })
-				id = idNum.toString()
-			}
+			if (id === null) throw new Error("File not opened")
 
 			const supportsRawIpcRequestBody = window.__TAURI_FS_STREAM_PLUGIN_INTERNALS__?.supportsRawIpcRequestBody
 			if (supportsRawIpcRequestBody === true) {

@@ -1,6 +1,5 @@
 use crate::*;
 use super::*;
-use tauri::Manager as _;
 use std::io::Write as _;
 
 
@@ -10,40 +9,38 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
+    resources: PluginResourcesState<'_, R>,
 ) -> Result<OpenWriteFileStreamEventOutput> {
 
     type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
 
     
+    let resources = std::sync::Arc::clone(&resources);
     let event: OpenWriteFileStreamEventInput = req.try_into()?;
 
     match event {
-        OpenWriteFileStreamEventInput::Open { path } => {
+        OpenWriteFileStreamEventInput::Open { path, options } => {
+            let path = resolve_path(options.base_dir, path, &app)?;
             validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;
 
             tauri::async_runtime::spawn_blocking(move || {
-                let file = std::fs::File::create(&path)?;
-                let id = app
-                    .resources_table()
-                    .add(FileResource::new(std::sync::Mutex::new(file)));
-
+                let file_options: std::fs::OpenOptions = (&options).into();
+                let file = file_options.open(path)?;
+                let id = resources.add(FileResource::new(std::sync::Mutex::new(file)))?;
                 Ok(OpenWriteFileStreamEventOutput::Open(id))
             }).await?
         },
         OpenWriteFileStreamEventInput::Write { id, data } => {
             tauri::async_runtime::spawn_blocking(move || {
-                let file = app.resources_table().get::<FileResource>(id)?.get();
+                let file = resources.get::<FileResource>(id)?.get();
                 let mut file = file.lock()?;
                 file.write_all(&data)?;
                 Ok(OpenWriteFileStreamEventOutput::Write(()))
             }).await?
         },
         OpenWriteFileStreamEventInput::Close { id } => {
-            tauri::async_runtime::spawn_blocking(move || {
-                let mut resources = app.resources_table();
-                if resources.has(id) {
-                    resources.close(id)?;
-                }
+            tauri::async_runtime::spawn_blocking(move || {   
+                resources.close(id)?;
                 Ok(OpenWriteFileStreamEventOutput::Close(()))
             }).await?
         },
@@ -54,6 +51,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
 pub enum OpenWriteFileStreamEventInput {
     Open {
         path: String,
+        options: OpenWriteFileStreamEventInputFileOptions
     },
     Write {
         id: tauri::ResourceId,
@@ -61,6 +59,42 @@ pub enum OpenWriteFileStreamEventInput {
     },
     Close {
         id: tauri::ResourceId,
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenWriteFileStreamEventInputFileOptions {
+    append: bool,
+    create: bool,
+    create_new: bool,
+    #[allow(unused)]
+    mode: Option<u32>,
+    base_dir: Option<tauri::path::BaseDirectory>
+}
+
+impl From<&OpenWriteFileStreamEventInputFileOptions> for std::fs::OpenOptions {
+
+    fn from(value: &OpenWriteFileStreamEventInputFileOptions) -> Self {
+        let mut options = std::fs::OpenOptions::new();
+
+        #[cfg(unix)] {
+            use std::os::unix::fs::OpenOptionsExt;
+            if let Some(mode) = &value.mode {
+                options.mode(*mode);
+            }
+        }
+
+        if value.append {
+            options.append(true);
+        }
+        else {  
+            options.truncate(true);
+        }
+        options.create(value.create);
+        options.create_new(value.create_new);
+        options.write(true);
+        options
     }
 }
 
@@ -78,15 +112,32 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
 
         match event_type {
             "Open" => {
-                let path = get_header_value("path")?.to_str()?;
-                let path = percent_encoding::percent_decode_str(path)
-                    .decode_utf8()?
+                let tauri::ipc::InvokeBody::Json(body) = self.body() else {
+                    return Err(Error::with("invalid body"))
+                };
+
+                let path = body
+                    .get("path")
+                    .ok_or_else(|| Error::missing_value("path"))?
+                    .as_str()
+                    .ok_or_else(|| Error::invalid_type("path"))?
                     .to_string();
 
-                Ok(OpenWriteFileStreamEventInput::Open { path })
+                let options = body
+                    .get("options")
+                    .ok_or_else(|| Error::missing_value("options"))?
+                    .as_str()
+                    .ok_or_else(|| Error::invalid_type("options"))?;
+                
+                let options = serde_json::from_str(options)?;
+
+                Ok(OpenWriteFileStreamEventInput::Open { path, options })
             },
             "Write" => {
-                let id = get_header_value("id")?.to_str()?.parse::<u32>()?;
+                let id = get_header_value("id")?
+                    .to_str()?
+                    .parse::<u32>()?;
+
                 let data = match self.body() {
                     tauri::ipc::InvokeBody::Raw(bytes) => {
                         bytes.clone()
@@ -121,7 +172,9 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
                 Ok(OpenWriteFileStreamEventInput::Write { id, data })
             },
             "Close" => {
-                let id = get_header_value("id")?.to_str()?.parse::<u32>()?;
+                let id = get_header_value("id")?
+                    .to_str()?
+                    .parse::<u32>()?;
 
                 Ok(OpenWriteFileStreamEventInput::Close { id })
             },

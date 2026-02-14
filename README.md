@@ -65,8 +65,12 @@ yarn add tauri-plugin-fs-stream-api@0.1.0 --exact
 
 # Usage
 ```typescript
-import { openReadFileStream, openWriteFileStream } from 'tauri-plugin-fs-stream-api';
+import { appDataDir, resolve } from "@tauri-apps/api/path";
+import { create } from "@tauri-apps/plugin-fs";
+import { openReadFileStream,  openWriteFileStream } from "tauri-plugin-fs-stream";
 
+const baseDirPath = await appDataDir()
+const srcPath = await resolve(baseDirPath, "my-data", "test-text.txt")
 
 ```
 

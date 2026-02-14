@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the close_all_file_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-close-all-file-streams",
+          "markdownDescription": "Enables the close_all_file_streams command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the close_all_file_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-close-all-file-streams",
+          "markdownDescription": "Denies the close_all_file_streams command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open_read_file_stream command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-read-file-stream",
