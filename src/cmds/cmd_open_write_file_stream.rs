@@ -14,6 +14,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
 
     type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
 
+    
     let event: OpenWriteFileStreamEventInput = req.try_into()?;
 
     match event {
@@ -111,6 +112,7 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
                             false => data,
                         };
 
+                        // TODO: データが大きい場合は別スレッドに逃す
                         use base64::engine::Engine;
                         base64::engine::general_purpose::STANDARD.decode(b64)?
                     },

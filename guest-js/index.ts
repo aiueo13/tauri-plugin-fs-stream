@@ -347,14 +347,14 @@ async function resolveReadFileStreamEvents(
 		open: async (options) => {
 			if (id !== null) throw new Error("File already opened")
 			if (lazyOpen) return
-			const idBytes = await dispatch("Open", { ...options, path: encodeURIComponent(path) })
+			const idBytes = await dispatch("Open", { ...options, path })
 			id = ridFromBytes(idBytes)
 		},
 
 		read: async (len, options) => {
 			if (id === null) {
 				if (!lazyOpen) throw new Error("File not opened")
-				const idBytes = await dispatch("Open", { ...options, path: encodeURIComponent(path) })
+				const idBytes = await dispatch("Open", { ...options, path })
 				id = ridFromBytes(idBytes)
 			}
 			const data = await dispatch("Read", { ...options, id, len, })
@@ -381,9 +381,7 @@ async function resolveWriteFileStreamEvents(
 
 	type CmdEvents = {
 		Open: { body: {}, headers: { path: string }, out: number },
-		Write:
-		{ body: {}, headers: { id: string, data: string }, out: void } |
-		{ body: Uint8Array, headers: { id: string }, out: void },
+		Write: { body: Uint8Array | { data: string }, headers: { id: string }, out: void },
 		Close: { body: {}, headers: { id: string }, out: void },
 	}
 	type CmdType = keyof CmdEvents
@@ -417,7 +415,7 @@ async function resolveWriteFileStreamEvents(
 				await dispatch("Write", chunk, { id })
 			}
 			else if (supportsRawIpcRequestBody === false) {
-				await dispatch("Write", {}, { id, data: await bytesToDataUrl(chunk) })
+				await dispatch("Write", { data: await bytesToDataUrl(chunk) }, { id })
 			}
 			else {
 				throw new Error("Missing value: supportsRawIpcRequestBody")

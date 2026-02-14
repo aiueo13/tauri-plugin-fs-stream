@@ -14,6 +14,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
 
     type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
     
+    
     match event {
         OpenReadFileStreamEventInput::Open { path } => {
             validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;

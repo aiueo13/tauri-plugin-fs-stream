@@ -6,7 +6,7 @@ use tauri::Manager as _;
 
 #[tauri::command]
 pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
-    event: EventInput,
+    event: OpenReadTextFileLinesStreamEventInput,
     app: tauri::AppHandle<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
@@ -24,7 +24,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
 
 
     match event {
-        EventInput::Open { path, label, max_line_len, ignore_bom } => {
+        OpenReadTextFileLinesStreamEventInput::Open { path, label, max_line_len, ignore_bom } => {
             validate_path_permission(&path, &app, &cmd_scope, &global_scope)?;
 
             tauri::async_runtime::spawn_blocking(move || {
@@ -47,7 +47,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                 Ok(OpenReadFileStreamEventOutput::Open(id).try_into()?)
             }).await?
         }
-        EventInput::Read { id, len } => {
+        OpenReadTextFileLinesStreamEventInput::Read { id, len } => {
             tauri::async_runtime::spawn_blocking(move || -> Result<_> {
                 let state = app.resources_table().get::<FileResource>(id)?.get();
                 let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -192,16 +192,16 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                     }
                 }
                     
-                Ok(EventOutput::Read(buf).try_into()?)
+                Ok(OpenReadTextFileLinesStreamEventOutput::Read(buf).try_into()?)
             }).await?
         }
-        EventInput::Close { id } => {
+        OpenReadTextFileLinesStreamEventInput::Close { id } => {
             tauri::async_runtime::spawn_blocking(move || {
                 let mut resources = app.resources_table();
                 if resources.has(id) {
                     resources.close(id)?;
                 }
-                Ok(EventOutput::Close(()).try_into()?)
+                Ok(OpenReadTextFileLinesStreamEventOutput::Close(()).try_into()?)
             }).await?
         }
     }
@@ -210,7 +210,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
 
 #[derive(serde::Deserialize)]
 #[serde(tag = "type")]
-pub enum EventInput {
+pub enum OpenReadTextFileLinesStreamEventInput {
     Open {
         path: String,
         label: String,
@@ -230,25 +230,25 @@ pub enum EventInput {
     },
 }
 
-pub enum EventOutput {
+pub enum OpenReadTextFileLinesStreamEventOutput {
     Open(tauri::ResourceId),
     Read(Vec<u8>),
     Close(()),
 }
 
-impl TryFrom<EventOutput> for tauri::ipc::Response {
+impl TryFrom<OpenReadTextFileLinesStreamEventOutput> for tauri::ipc::Response {
     type Error = Error;
 
-    fn try_from(v: EventOutput) -> Result<tauri::ipc::Response> {
+    fn try_from(v: OpenReadTextFileLinesStreamEventOutput) -> Result<tauri::ipc::Response> {
         match v {
-            EventOutput::Open(id) => {
+            OpenReadTextFileLinesStreamEventOutput::Open(id) => {
                  let id_bytes = convert_rid_to_bytes(id);
                  Ok(tauri::ipc::Response::new(id_bytes))
             },
-            EventOutput::Read(bytes) => {
+            OpenReadTextFileLinesStreamEventOutput::Read(bytes) => {
                 Ok(tauri::ipc::Response::new(bytes))
             },
-            EventOutput::Close(()) => {
+            OpenReadTextFileLinesStreamEventOutput::Close(()) => {
                 Ok(tauri::ipc::Response::new(Vec::new()))
             }
         }

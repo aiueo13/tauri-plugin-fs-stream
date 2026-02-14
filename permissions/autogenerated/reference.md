@@ -88,4 +88,37 @@ Denies the open_write_file_stream command without any pre-configured scope.
 
 </td>
 </tr>
+
+<tr>
+<td>
+
+`fs-stream:scope`
+
+</td>
+<td>
+
+An empty permission you can use to modify the global scope.
+
+## Example
+
+```json
+{
+  "permissions": [
+    "fs-stream:allow-open-read-file-stream",
+    {
+      "identifier": "fs-stream:scope",
+      "allow": [
+        "$APPDATA/documents/**/*"
+      ],
+      "deny": [
+        "$APPDATA/documents/secret.txt"
+      ]
+    }
+  ]
+}
+```
+
+
+</td>
+</tr>
 </table>
