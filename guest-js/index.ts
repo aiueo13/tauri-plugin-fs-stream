@@ -34,7 +34,7 @@ export type OpenReadFileStreamOptions = {
  * These releases may be performed multiple times without issue.
  * 
  * @param path - The file path to read. 
- * @param options - Optional settings: `bufferByteLength`, `baseDir`. See {@linkcode OpenReadFileStreamOptions} for detailed descriptions of each item.
+ * @param options - Optional settings: `bufferByteLength`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -151,7 +151,7 @@ export type OpenReadTextFileLinesStreamItem = {
  * Opens the file with read-only mode and resolves to a `ReadableStream` of text lines. 
  *  
  * The stream yields decoded text line by line.   
- * See: {@linkcode OpenReadTextFileLinesStreamItem}.
+ * See: `OpenReadTextFileLinesStreamItem`.
  * 
  * The returned `ReadableStream` must always be released by the caller.
  * Failure to do so may cause file resource leaks.
@@ -163,7 +163,7 @@ export type OpenReadTextFileLinesStreamItem = {
  * These releases may be performed multiple times without issue.
  * 
  * @param path - The file path to read. 
- * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `baseDir`. See {@linkcode OpenReadTextFileLinesStreamOptions} for detailed descriptions of each item.
+ * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -262,7 +262,7 @@ export type OpenWriteFileStreamOptions = {
  * These releases may be performed multiple times without issue.
  * 
  * @param path - The file path to write to. 
- * @param options - Optional settings: `bufferByteLength`, `append`, `create`, `createNew`, `mode`, `baseDir`. See {@linkcode OpenWriteFileStreamOptions} for detailed descriptions of each item.
+ * @param options - Optional settings: `bufferByteLength`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
