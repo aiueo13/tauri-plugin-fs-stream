@@ -65,13 +65,28 @@ yarn add tauri-plugin-fs-stream-api@0.1.0 --exact
 
 # Usage
 ```typescript
-import { appDataDir, resolve } from "@tauri-apps/api/path";
-import { create } from "@tauri-apps/plugin-fs";
-import { openReadFileStream,  openWriteFileStream } from "tauri-plugin-fs-stream";
+import { openReadFileStream, openWriteFileStream } from "tauri-plugin-fs-stream-api";
 
-const baseDirPath = await appDataDir()
-const srcPath = await resolve(baseDirPath, "my-data", "test-text.txt")
+async function convertFile(
+  inputPath: string,
+  outputPath: string,
+  convertor: TransformStream<Uint8Array<ArrayBuffer>, Uint8Array>
+) {
 
+  let input: ReadableStream<Uint8Array<ArrayBuffer>> | null = null
+  let output: WritableStream<Uint8Array> | null = null
+  try {
+    input = await openReadFileStream(inputPath)
+    output = await openWriteFileStream(outputPath)
+    await input.pipeThrough(convertor).pipeTo(output)
+  }
+  catch (e) {
+    // Ensure streams are properly closed in case of error
+    await input?.cancel().catch(() => {})
+    await output?.abort().catch(() => {})
+    throw e
+  }
+}
 ```
 
 # License
