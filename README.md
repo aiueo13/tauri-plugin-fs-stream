@@ -81,7 +81,7 @@ async function convertFile(
     await input.pipeThrough(convertor).pipeTo(output)
   }
   catch (e) {
-    // Ensure streams are properly closed in case of error
+    // Ensure streams are closed
     await input?.cancel().catch(() => {})
     await output?.abort().catch(() => {})
     throw e

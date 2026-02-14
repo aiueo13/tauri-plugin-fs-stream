@@ -2,7 +2,7 @@
   "name": "tauri-plugin-fs-stream-api",
   "version": "0.1.0",
   "author": "OkaYu",
-  "description": "API for creating file stream",
+  "description": "File Streaming API for Tauri",
   "keywords": ["tauri", "plugin", "fs", "stream", "read", "write", "file"],
   "icense": "(MIT OR Apache-2.0)",
   "repository": {

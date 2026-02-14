@@ -2,7 +2,7 @@
 name = "tauri-plugin-fs-stream"
 version = "0.1.0"
 authors = ["OkaYu"]
-description = "API for creating file stream"
+description = "File Streaming API for Tauri"
 edition = "2021"
 rust-version = "1.77.2"
 exclude = ["/dist-js", "/guest-js", "/node_modules"]
