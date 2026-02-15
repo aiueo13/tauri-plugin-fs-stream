@@ -20,7 +20,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
     let config = std::sync::Arc::clone(&config);
 
     match event {
-        OpenReadTextFileLinesStreamEventInput::Open { path, base_dir, label, max_line_len, ignore_bom } => {
+        OpenReadTextFileLinesStreamEventInput::Open { path, base_dir, label, max_line_len, ignore_bom, freeze_size } => {
             let path = resolve_path(
                 &webview,
                 &global_scope, 
@@ -32,9 +32,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
 
             tauri::async_runtime::spawn_blocking(move || {
                 let file = std::fs::File::open(&path)?;
-                let len = file.metadata()?.len();
                 let res = FileResourceInner {
-                    file: std::io::BufReader::new(file),
                     max_line_len: std::num::NonZeroU64::new(max_line_len),
                     line_breaks: line_breaks_for_encoding_label(&label),
                     bom: match ignore_bom {
@@ -42,8 +40,12 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                         false => bom_for_encoding_label(&label)
                     },
                     bom_handled: false,
-                    init_file_len: len,
+                    read_limit: match freeze_size {
+                        true => Some(file.metadata()?.len()),
+                        false => None,
+                    },
                     read: 0,
+                    file: std::io::BufReader::new(file),
                 };
 
                 let id = resources.add(FileResource::new(std::sync::Mutex::new(res)))?;
@@ -94,7 +96,8 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
 
                 let mut buf = Vec::with_capacity(usize::min(len as usize, 2 * 1024 * 1024));
                 loop {
-                    let header_offset = buf.len();
+                    let offset = buf.len();
+                    let header_offset = offset;
                     let err_flag_offset = header_offset;
                     let line_break_type_offset = err_flag_offset + ERR_FLAG_LEN;
                     let line_len_offset = line_break_type_offset + LINE_BREAK_TYPE_LEN;
@@ -103,7 +106,10 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                     // header の場所を確保
                     buf.extend_from_slice(&[0; HEADER_LEN]);
 
-                    let mut nlimit = state.init_file_len - state.read;
+                    let mut nlimit = u64::MAX;
+                    if let Some(read_limit) = state.read_limit {
+                        nlimit = u64::min(nlimit, read_limit.saturating_sub(state.read));
+                    } 
                     if let Some(max_line_len) = max_line_len {
                         // α は制限に含まない改行や BOM が取りうる最大の合計バイト数
                         let mut alpha = line_break.lf.len() + line_break.cr.len();
@@ -111,7 +117,10 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                             alpha += bom.map(|b| b.len()).unwrap_or(0);
                         }
 
+                        // 制限 + α のバイトを読み込み、
+                        // 制限を超えているかどうかで制限より大きいデータがあるかを判定する。
                         let max_line_len = max_line_len.get().saturating_add(alpha as u64);
+
                         nlimit = u64::min(nlimit, max_line_len);
                     }
 
@@ -125,9 +134,8 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                     state.read += nread as u64;
 
                     // EOF の場合
-                    if nread == 0 || state.init_file_len <= state.read {
-                        // header 用に確保した分をキャンセル
-                        buf.truncate(header_offset);
+                    if nread == 0 || state.read_limit.is_some_and(|l| l <= state.read) {
+                        buf.truncate(offset);
                         break
                     }
 
@@ -209,7 +217,7 @@ struct FileResourceInner {
     line_breaks: LineBreaks,
     bom: Option<&'static [u8]>,
     bom_handled: bool,
-    init_file_len: u64,
+    read_limit: Option<u64>,
     read: u64
 }
 
@@ -220,6 +228,9 @@ pub enum OpenReadTextFileLinesStreamEventInput {
     Open {
         path: tauri_plugin_fs::SafeFilePath,
         label: String,
+
+        #[serde(rename = "freezeSize")]
+        freeze_size: bool,
 
         #[serde(rename = "baseDir")]
         base_dir: Option<tauri::path::BaseDirectory>,

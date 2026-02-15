@@ -16,6 +16,16 @@ export type OpenReadFileStreamOptions = {
 	bufferByteLength?: number,
 
 	/**
+	 * Indicates whether to limit the read stream to the file's size at the moment of opening.
+	 * 
+	 * - `true`: The stream acts as a fixed snapshot. It stops reading exactly when the initial file size is reached. This is a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
+	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open, but is unsafe for self-copying operations.
+	 * 
+	 * Defaults to `true`.
+	 */
+	freezeSize?: boolean,
+
+	/**
 	 * Base directory for `path`.
 	 */
 	baseDir?: BaseDirectory
@@ -34,7 +44,7 @@ export type OpenReadFileStreamOptions = {
  * These releases may be performed multiple times without issue.
  * 
  * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `bufferByteLength`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
+ * @param options - Optional settings: `bufferByteLength`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -44,10 +54,11 @@ export async function openReadFileStream(
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
 
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
+	const freezeSize = options?.freezeSize ?? true
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_file_stream",
 		mapFsPathForInput(path),
-		{ baseDir: options?.baseDir }
+		{ baseDir: options?.baseDir, freezeSize }
 	)
 
 	try {
@@ -123,6 +134,16 @@ export type OpenReadTextFileLinesStreamOptions = {
 	maxLineByteLength?: number,
 
 	/**
+	 * Indicates whether to limit the read stream to the file's size at the moment of opening.
+	 * 
+	 * - `true`: The stream acts as a fixed snapshot. It stops reading exactly when the initial file size is reached. This is a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
+	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open, but is unsafe for self-copying operations.
+	 * 
+	 * Defaults to `true`.
+	 */
+	freezeSize?: boolean,
+
+	/**
 	 * Base directory for `path`.
 	 */
 	baseDir?: BaseDirectory,
@@ -163,7 +184,7 @@ export type OpenReadTextFileLinesStreamItem = {
  * These releases may be performed multiple times without issue.
  * 
  * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
+ * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `freezeSize`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -177,10 +198,11 @@ export async function openReadTextFileLinesStream(
 	const label = mapEncodingLabelForInput(options?.encoding)
 	const fatal = options?.fatal ?? false
 	const ignoreBOM = options?.ignoreBOM ?? false
+	const freezeSize = options?.freezeSize ?? true
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_text_file_lines_stream",
 		mapFsPathForInput(path),
-		{ baseDir: options?.baseDir }
+		{ baseDir: options?.baseDir, freezeSize }
 	)
 
 	try {
@@ -365,12 +387,13 @@ async function resolveReadFileStreamEvents(
 	cmd: string,
 	path: string,
 	options: {
-		baseDir?: BaseDirectory
+		baseDir?: BaseDirectory,
+		freezeSize: boolean
 	}
 ): Promise<ReadFileStreamEvents> {
 
 	type CmdEvents = {
-		Open: { path: string, baseDir?: BaseDirectory },
+		Open: { path: string, baseDir?: BaseDirectory, freezeSize: boolean },
 		Read: { id: number, len: number },
 		Close: { id: number },
 	}
@@ -386,7 +409,12 @@ async function resolveReadFileStreamEvents(
 	return {
 		open: async (ops) => {
 			if (id !== null) throw new Error("File already opened")
-			const idBytes = await dispatch("Open", { ...ops, path, baseDir: options.baseDir })
+			const idBytes = await dispatch("Open", {
+				...ops,
+				path,
+				freezeSize: options.freezeSize,
+				baseDir: options.baseDir
+			})
 			id = ridFromBytes(idBytes)
 		},
 

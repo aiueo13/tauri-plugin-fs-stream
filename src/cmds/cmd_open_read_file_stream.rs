@@ -20,7 +20,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
     let config = std::sync::Arc::clone(&config);
     
     match event {
-        OpenReadFileStreamEventInput::Open { path, base_dir } => {
+        OpenReadFileStreamEventInput::Open { path, base_dir, freeze_size } => {
             let path = resolve_path(
                 &webview,
                 &global_scope, 
@@ -32,11 +32,13 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
             
             tauri::async_runtime::spawn_blocking(move || {
                 let file = std::fs::File::open(&path)?;
-                let len = file.metadata()?.len();
                 let res = FileResourceInner {
-                    file, 
-                    init_file_len: len,
-                    read: 0
+                    read_limit: match freeze_size {
+                        true => Some(file.metadata()?.len()),
+                        false => None,
+                    },
+                    read: 0,
+                    file,
                 };
                 let id = resources.add(FileResource::new(std::sync::Mutex::new(res)))?;
                 OpenReadFileStreamEventOutput::Open(id).try_into()
@@ -47,19 +49,23 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
                 let state = resources.get::<FileResource>(id)?.get();
                 let mut state = state.lock()?;
                 
-                if state.init_file_len <= state.read {
+                if state.read_limit.is_some_and(|l| l <= state.read) {
                     return OpenReadFileStreamEventOutput::Read(Vec::new()).try_into();
                 }
 
-                let n = u64::min(len, state.init_file_len - state.read);
-                let mut buf = Vec::with_capacity(usize::min(n as usize, 2 * 1024 * 1024));
+                let mut nlimit = len;
+                if let Some(read_limit) = state.read_limit {
+                    nlimit = u64::min(nlimit, read_limit.saturating_sub(state.read));
+                }
 
-                state.file
+                let mut buf = Vec::with_capacity(usize::min(nlimit as usize, 2 * 1024 * 1024));
+
+                let nread = state.file
                     .by_ref()
-                    .take(n)
+                    .take(nlimit)
                     .read_to_end(&mut buf)?;
 
-                state.read += buf.len() as u64;
+                state.read += nread as u64;
 
                 OpenReadFileStreamEventOutput::Read(buf).try_into()
             }).await?
@@ -75,7 +81,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
 
 struct FileResourceInner {
     file: std::fs::File,
-    init_file_len: u64,
+    read_limit: Option<u64>,
     read: u64,
 }
 
@@ -85,6 +91,9 @@ struct FileResourceInner {
 pub enum OpenReadFileStreamEventInput {
     Open {
         path: tauri_plugin_fs::SafeFilePath,
+
+        #[serde(rename = "freezeSize")]
+        freeze_size: bool,
 
         #[serde(rename = "baseDir")]
         base_dir: Option<tauri::path::BaseDirectory>
