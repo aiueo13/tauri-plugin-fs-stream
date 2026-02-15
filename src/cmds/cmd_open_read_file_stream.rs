@@ -84,7 +84,7 @@ struct FileResourceInner {
 #[serde(tag = "type")]
 pub enum OpenReadFileStreamEventInput {
     Open {
-        path: String,
+        path: tauri_plugin_fs::SafeFilePath,
 
         #[serde(rename = "baseDir")]
         base_dir: Option<tauri::path::BaseDirectory>

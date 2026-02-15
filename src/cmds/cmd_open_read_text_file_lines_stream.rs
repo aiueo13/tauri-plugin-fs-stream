@@ -105,8 +105,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
 
                     let mut nlimit = state.init_file_len - state.read;
                     if let Some(max_line_len) = max_line_len {
-                        // 制限 + α のデータを読み込み、行が制限を超えているかを確認する。
-                        // α があるのは制限丁度だと EOL　か制限で引っかかったのかわからないため。
+                        // α は制限に含まない改行や BOM が取りうる最大の合計バイト数
                         let mut alpha = line_break.lf.len() + line_break.cr.len();
                         if !state.bom_handled {
                             alpha += bom.map(|b| b.len()).unwrap_or(0);
@@ -219,7 +218,7 @@ struct FileResourceInner {
 #[serde(tag = "type")]
 pub enum OpenReadTextFileLinesStreamEventInput {
     Open {
-        path: String,
+        path: tauri_plugin_fs::SafeFilePath,
         label: String,
 
         #[serde(rename = "baseDir")]

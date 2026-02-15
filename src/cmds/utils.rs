@@ -1,4 +1,3 @@
-use super::*;
 use crate::*;
 use tauri::Manager as _;
 use tauri_plugin_fs::FsExt as _;
@@ -38,11 +37,11 @@ pub fn resolve_path<R: tauri::Runtime>(
     global_scope: &tauri::ipc::GlobalScope<Scope>,
     command_scope: &tauri::ipc::CommandScope<Scope>,
     config: &PluginConfig,
-    path: impl AsRef<std::path::Path>,
+    path: tauri_plugin_fs::SafeFilePath,
     base_dir: Option<tauri::path::BaseDirectory>,
 ) -> Result<std::path::PathBuf> {
 
-    let path = path.as_ref();
+    let path = path.into_path()?;
     let path = if let Some(base_dir) = base_dir {
         webview.path().resolve(&path, base_dir)?
     } else {
@@ -148,7 +147,7 @@ fn is_forbidden<P: AsRef<std::path::Path>>(
 // - https://github.com/tauri-apps/plugins-workspace/blob/3d0d2e041bbad9766aebecaeba291a28d8d7bf5c/plugins/fs/src/lib.rs#L347
 // - Copyright 2019-2023 Tauri Programme within The Commons Conservancy
 // - Licensed under the MIT License or the Apache 2.0 License
-impl tauri::ipc::ScopeObject for scope::Scope {
+impl tauri::ipc::ScopeObject for Scope {
     type Error = Error;
 
     fn deserialize<R: tauri::Runtime>(
@@ -156,8 +155,8 @@ impl tauri::ipc::ScopeObject for scope::Scope {
         raw: tauri::utils::acl::Value,
     ) -> Result<Self> {
         let path = serde_json::from_value(raw.into()).map(|raw| match raw {
-            scope::ScopeSchema::Value(path) => path,
-            scope::ScopeSchema::Object { path } => path,
+            ScopeSchema::Value(path) => path,
+            ScopeSchema::Object { path } => path,
         })?;
 
         use tauri::Manager as _;

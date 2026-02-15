@@ -33,20 +33,20 @@ export type OpenReadFileStreamOptions = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to read. 
+ * @param path - The file path or file scheme URL to read. 
  * @param options - Optional settings: `bufferByteLength`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openReadFileStream(
-	path: string,
+	path: string | URL,
 	options?: OpenReadFileStreamOptions
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
 
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_file_stream",
-		path,
+		mapFsPathForInput(path),
 		{ baseDir: options?.baseDir }
 	)
 
@@ -162,13 +162,13 @@ export type OpenReadTextFileLinesStreamItem = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to read. 
+ * @param path - The file path or file scheme URL to read. 
  * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openReadTextFileLinesStream(
-	path: string,
+	path: string | URL,
 	options?: OpenReadTextFileLinesStreamOptions,
 ): Promise<ReadableStream<OpenReadTextFileLinesStreamItem>> {
 
@@ -179,7 +179,7 @@ export async function openReadTextFileLinesStream(
 	const ignoreBOM = options?.ignoreBOM ?? false
 	const { open, read, close } = await resolveReadFileStreamEvents(
 		"plugin:fs-stream|open_read_text_file_lines_stream",
-		path,
+		mapFsPathForInput(path),
 		{ baseDir: options?.baseDir }
 	)
 
@@ -261,13 +261,13 @@ export type OpenWriteFileStreamOptions = {
  * 
  * These releases may be performed multiple times without issue.
  * 
- * @param path - The file path to write to. 
+ * @param path - The file path or file scheme URL write to. 
  * @param options - Optional settings: `bufferByteLength`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
 export async function openWriteFileStream(
-	path: string,
+	path: string | URL,
 	options?: OpenWriteFileStreamOptions
 ): Promise<WritableStream<Uint8Array<ArrayBufferLike>>> {
 
@@ -281,7 +281,7 @@ export async function openWriteFileStream(
 	}
 	const { open, write, close } = await resolveWriteFileStreamEvents(
 		"plugin:fs-stream|open_write_file_stream",
-		path,
+		mapFsPathForInput(path),
 		fileOptions,
 	)
 
@@ -300,10 +300,10 @@ export async function openWriteFileStream(
 
 
 /**
- * Forcibly disposes all file streams.
+ * Forcibly disposes of all file streams.
  *
- * Releases all backend file resources owned by `ReadableStream` and `WritableStream`
- * instances created by this plugin.
+ * All backend file resources owned by `ReadableStream` and `WritableStream` instances 
+ * created by this plugin are detached from the frontend and released.
  * 
  * After this operation, any read or write operation on existing streams will result in an error, 
  * except for buffering on the frontend.
@@ -350,6 +350,10 @@ function mapMaxLineByteLength(s?: number): number {
 	}
 
 	return s
+}
+
+function mapFsPathForInput(path: string | URL): string {
+	return path instanceof URL ? path.toString() : path
 }
 
 type ReadFileStreamEvents = {

@@ -1,4 +1,4 @@
-#[path = "src/cmds/scope.rs"]
+#[path = "src/scope.rs"]
 mod scope;
 
 fn main() {

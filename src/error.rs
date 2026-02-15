@@ -25,6 +25,9 @@ pub enum Error {
     TauriHttpHeaderToStr(#[from] tauri::http::header::ToStrError),
 
     #[error(transparent)]
+    TauriPluginFs(#[from] tauri_plugin_fs::Error),
+
+    #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
 
     #[error(transparent)]

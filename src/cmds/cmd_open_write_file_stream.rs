@@ -1,6 +1,7 @@
 use crate::*;
 use super::*;
 use std::io::Write as _;
+use std::str::FromStr as _;
 
 
 #[tauri::command]
@@ -58,7 +59,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
 
 pub enum OpenWriteFileStreamEventInput {
     Open {
-        path: String,
+        path: tauri_plugin_fs::SafeFilePath,
         options: OpenWriteFileStreamEventInputFileOptions
     },
     Write {
@@ -130,6 +131,8 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
                     .as_str()
                     .ok_or_else(|| Error::invalid_type("path"))?
                     .to_string();
+
+                let path = tauri_plugin_fs::SafeFilePath::from_str(&path)?;
 
                 let options = body
                     .get("options")

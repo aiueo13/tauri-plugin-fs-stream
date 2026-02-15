@@ -1,9 +1,11 @@
 mod cmds;
 mod config;
 mod error;
+mod scope;
 mod state;
 
 use error::*;
+use scope::*;
 use state::*;
 
 
