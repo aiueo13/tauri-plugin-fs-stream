@@ -93,7 +93,7 @@ Access control for file paths follows [the same model as the fs plugin](https://
 
 This plugin prevents path traversal and can access only the paths explicitly declared in the capability file. In that case, you can also configure `plugins.fs-stream.requireLiteralLeadingDot` in `src-tauri/tauri.conf.json` like with the fs plugin.
 
-An exception applies to files that the user explicitly selects through drag and drop (only when the fs plugin is enabled) or via  [the dialog plugin](https://v2.tauri.app/plugin/dialog/). Such files are accessible even if they are not declared in the capability configuration. And these permissions can be persisted using [the persisted scope plugin](https://v2.tauri.app/plugin/persisted-scope/), allowing access to remain available across application restarts.
+An exception applies to files that the user explicitly selects through drag and drop or via  [the dialog plugin](https://v2.tauri.app/plugin/dialog/). Such files are accessible even if they are not declared in the capability configuration. And these permissions can be persisted using [the persisted scope plugin](https://v2.tauri.app/plugin/persisted-scope/), allowing access to remain available across application restarts. Note that to use these features, the fs plugin must be registered in your Tauri project. In other words, `tauri_plugin_fs::init()` must be in `src-tauri/src/lib.rs`.
 
 # License
 This project is licensed under either of
