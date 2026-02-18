@@ -7,7 +7,7 @@ export type OpenReadFileStreamOptions = {
 	/**
 	 * The buffer size, in bytes, used when sending data from the backend to the frontend.
 	 * 
-	 * IPC calls are relatively expensive (several milliseconds to tens of milliseconds per no-op call), 
+	 * IPC calls are relatively expensive, 
 	 * so larger buffer sizes are generally more efficient. 
 	 * But if it is too large, the UI may freeze or run out of memory.
 	 * 
@@ -112,7 +112,7 @@ export type OpenReadTextFileLinesStreamOptions = {
 	/**
 	 * The buffer size, in bytes, used when sending data from the backend to the frontend.
 	 * 
-	 * IPC calls are relatively expensive (several milliseconds to tens of milliseconds per no-op call), 
+	 * IPC calls are relatively expensive, 
 	 * so larger buffer sizes are generally more efficient. 
 	 * But if it is too large, the UI may freeze or run out of memory.
 	 * 
@@ -227,7 +227,7 @@ export type OpenWriteFileStreamOptions = {
 	/**
 	 * The buffer size, in bytes, used when sending data from the frontend to the backend.
 	 * 
-	 * IPC calls are relatively expensive (several milliseconds to tens of milliseconds per no-op call), 
+	 * IPC calls are relatively expensive, 
 	 * so larger buffer sizes are generally more efficient. 
 	 * But if it is too large, the UI may freeze or run out of memory.
 	 * 
