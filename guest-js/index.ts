@@ -335,15 +335,6 @@ export async function closeAllFileStreams(): Promise<void> {
 }
 
 
-/** @ignore */
-declare global {
-	interface Window {
-		__TAURI_FS_STREAM_PLUGIN_INTERNALS__?: {
-			supportsRawIpcRequestBody: boolean
-		}
-	}
-}
-
 /** 512 KiB */
 const DEFAULT_BUFFER_SIZE_FOR_IPC = 512 * 1024;
 
@@ -449,7 +440,7 @@ async function resolveWriteFileStreamEvents(
 ): Promise<WriteFileStreamEvents> {
 
 	type CmdEvents = {
-		Open: { body: { path: string, options: string }, headers: {}, out: number },
+		Open: { body: Uint8Array, headers: { path: string, options: string }, out: { id: number, supportsRawIpcRequestBody: boolean } },
 		Write: { body: Uint8Array | { data: string }, headers: { id: string }, out: void },
 		Close: { body: {}, headers: { id: string }, out: void },
 	}
@@ -462,27 +453,41 @@ async function resolveWriteFileStreamEvents(
 	}
 
 
+	const PAYLOAD_FOR_CHCKING_RAW_IPC_REQUEST_BODY_SUPPROTED = new Uint8Array([0]);
+
 	let id: string | null = null
+	let supportsRawIpcRequestBody: boolean | null = null
 
 	return {
 		open: async () => {
 			if (id !== null) throw new Error("File already opened")
-			const idNum = await dispatch("Open", { path, options: JSON.stringify(options) }, {})
-			id = idNum.toString()
+
+			const res = await dispatch("Open",
+				PAYLOAD_FOR_CHCKING_RAW_IPC_REQUEST_BODY_SUPPROTED,
+				{
+					path: encodeURIComponent(path),
+					options: encodeURIComponent(JSON.stringify(options))
+				}
+			)
+			
+			supportsRawIpcRequestBody = res.supportsRawIpcRequestBody
+			id = res.id.toString()
 		},
 
 		write: async (chunk) => {
 			if (id === null) throw new Error("File not opened")
+			if (supportsRawIpcRequestBody === null) throw new Error("Missing value: supportsRawIpcRequestBody")
 
-			const supportsRawIpcRequestBody = window.__TAURI_FS_STREAM_PLUGIN_INTERNALS__?.supportsRawIpcRequestBody
-			if (supportsRawIpcRequestBody === true) {
+			if (supportsRawIpcRequestBody) {
 				await dispatch("Write", chunk, { id })
 			}
-			else if (supportsRawIpcRequestBody === false) {
-				await dispatch("Write", { data: await bytesToDataUrl(chunk) }, { id })
-			}
+			// IPC のリクエストで raw Body を送れない場合、
+			// 大きな配列に対して非常に非効率な形式にシリアライズされる。
+			// よって、まだマシな dataURL としてデータを送る。
+			// Data URL を用いる理由は web API の FileReader で比較的効率的に作成できるため。
+			// <https://github.com/tauri-apps/tauri/issues/10573>
 			else {
-				throw new Error("Missing value: supportsRawIpcRequestBody")
+				await dispatch("Write", { data: await bytesToDataUrl(chunk) }, { id })
 			}
 		},
 

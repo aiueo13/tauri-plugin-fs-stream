@@ -1,3 +1,6 @@
+# ver. 0.5
+- 特定の条件における openWriteFileStream のパフォーマンスを改善。
+
 # ver. 0.4
 - ドキュメントを変更。
 - openReadFileStream, openReadTextFileLinesStream の引数に options.freezeSize を追加。

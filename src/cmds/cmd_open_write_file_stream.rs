@@ -22,7 +22,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
     let event: OpenWriteFileStreamEventInput = req.try_into()?;
 
     match event {
-        OpenWriteFileStreamEventInput::Open { path, options } => {
+        OpenWriteFileStreamEventInput::Open { path, options, supports_raw_ipc_request_body } => {
             let path = resolve_path(
                 &webview,
                 &global_scope, 
@@ -33,17 +33,21 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
             )?;
 
             tauri::async_runtime::spawn_blocking(move || {
-                let file_options: std::fs::OpenOptions = (&options).into();
+                let file_options = std::fs::OpenOptions::from(&options);
                 let file = file_options.open(path)?;
-                let id = resources.add(FileResource::new(std::sync::Mutex::new(file)))?;
-                Ok(OpenWriteFileStreamEventOutput::Open(id))
+                let res = FileResource::new(std::sync::Mutex::new(file));
+                let id = resources.add(res)?;
+                Ok(OpenWriteFileStreamEventOutput::Open { id, supports_raw_ipc_request_body })
             }).await?
         },
         OpenWriteFileStreamEventInput::Write { id, data } => {
             tauri::async_runtime::spawn_blocking(move || {
-                let file = resources.get::<FileResource>(id)?.get();
-                let mut file = file.lock()?;
-                file.write_all(&data)?;
+                resources
+                    .get::<FileResource>(id)?
+                    .get()
+                    .lock()?
+                    .write_all(&data)?;
+
                 Ok(OpenWriteFileStreamEventOutput::Write(()))
             }).await?
         },
@@ -60,6 +64,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
 pub enum OpenWriteFileStreamEventInput {
     Open {
         path: tauri_plugin_fs::SafeFilePath,
+        supports_raw_ipc_request_body: bool,
         options: OpenWriteFileStreamEventInputFileOptions
     },
     Write {
@@ -121,28 +126,25 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
 
         match event_type {
             "Open" => {
-                let tauri::ipc::InvokeBody::Json(body) = self.body() else {
-                    return Err(Error::with("invalid body"))
+                // 呼び出し時に body として与えられた判定用の payload をチェックして
+                // raw IPC が可能かどうかを調べる。
+                // <https://github.com/tauri-apps/tauri/issues/10573>
+                let supports_raw_ipc_request_body = match self.body() {
+                    tauri::ipc::InvokeBody::Json(_) => false,
+                    tauri::ipc::InvokeBody::Raw(_) => true,
                 };
 
-                let path = body
-                    .get("path")
-                    .ok_or_else(|| Error::missing_value("path"))?
-                    .as_str()
-                    .ok_or_else(|| Error::invalid_type("path"))?
-                    .to_string();
+                let path = get_header_value("path")
+                    .map(|p| percent_encoding::percent_decode(p.as_ref()))
+                    .and_then(|p| p.decode_utf8().map_err(Into::into))
+                    .and_then(|p| tauri_plugin_fs::SafeFilePath::from_str(&p).map_err(Into::into))?;
+               
+                let options = get_header_value("options")
+                    .map(|s| percent_encoding::percent_decode(s.as_ref()))
+                    .and_then(|s| s.decode_utf8().map_err(Into::into))
+                    .and_then(|s| serde_json::from_str(&s).map_err(Into::into))?;
 
-                let path = tauri_plugin_fs::SafeFilePath::from_str(&path)?;
-
-                let options = body
-                    .get("options")
-                    .ok_or_else(|| Error::missing_value("options"))?
-                    .as_str()
-                    .ok_or_else(|| Error::invalid_type("options"))?;
-                
-                let options = serde_json::from_str(options)?;
-
-                Ok(OpenWriteFileStreamEventInput::Open { path, options })
+                Ok(OpenWriteFileStreamEventInput::Open { path, options, supports_raw_ipc_request_body })
             },
             "Write" => {
                 let id = get_header_value("id")?
@@ -150,11 +152,11 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
                     .parse::<u32>()?;
 
                 let data = match self.body() {
-                    tauri::ipc::InvokeBody::Raw(bytes) => {
-                        bytes.clone()
+                    tauri::ipc::InvokeBody::Raw(body) => {
+                        body.clone()
                     },
-                    tauri::ipc::InvokeBody::Json(json) => {
-                        let data = json
+                    tauri::ipc::InvokeBody::Json(body) => {
+                        let data = body
                             .get("data")
                             .ok_or_else(|| Error::missing_value("data"))?
                             .as_str()
@@ -197,7 +199,13 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(untagged)]
 pub enum OpenWriteFileStreamEventOutput {
-    Open(tauri::ResourceId),
+    Open {
+        id: tauri::ResourceId,
+
+        #[serde(rename="supportsRawIpcRequestBody")]
+        supports_raw_ipc_request_body: bool
+    },
     Write(()),
     Close(()),
 }
+

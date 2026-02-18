@@ -13,7 +13,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
     config: PluginConfigState<'_>,
 ) -> Result<tauri::ipc::Response> {
 
-    type FileResource = PluginResource<std::sync::Mutex<FileResourceInner>>;
+    type FileReaderResource = PluginResource<std::sync::Mutex<FileReader>>;
 
     
     let resources = std::sync::Arc::clone(&resources);
@@ -32,42 +32,27 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
             
             tauri::async_runtime::spawn_blocking(move || {
                 let file = std::fs::File::open(&path)?;
-                let res = FileResourceInner {
-                    read_limit: match freeze_size {
-                        true => Some(file.metadata()?.len()),
-                        false => None,
-                    },
-                    read: 0,
-                    file,
+                let read_limit = match freeze_size {
+                    true => Some(file.metadata()?.len()),
+                    false => None,
                 };
-                let id = resources.add(FileResource::new(std::sync::Mutex::new(res)))?;
+
+                let res = FileReader::new(file, read_limit);
+                let res = FileReaderResource::new(std::sync::Mutex::new(res));
+                let id = resources.add(res)?;
+
                 OpenReadFileStreamEventOutput::Open(id).try_into()
             }).await?
         },
         OpenReadFileStreamEventInput::Read { id, len } => {
             tauri::async_runtime::spawn_blocking(move || -> Result<_> {
-                let state = resources.get::<FileResource>(id)?.get();
-                let mut state = state.lock()?;
+                let data = resources
+                    .get::<FileReaderResource>(id)?
+                    .get()
+                    .lock()?
+                    .read_chunk(len)?;
                 
-                if state.read_limit.is_some_and(|l| l <= state.read) {
-                    return OpenReadFileStreamEventOutput::Read(Vec::new()).try_into();
-                }
-
-                let mut nlimit = len;
-                if let Some(read_limit) = state.read_limit {
-                    nlimit = u64::min(nlimit, read_limit.saturating_sub(state.read));
-                }
-
-                let mut buf = Vec::with_capacity(usize::min(nlimit as usize, 2 * 1024 * 1024));
-
-                let nread = state.file
-                    .by_ref()
-                    .take(nlimit)
-                    .read_to_end(&mut buf)?;
-
-                state.read += nread as u64;
-
-                OpenReadFileStreamEventOutput::Read(buf).try_into()
+                OpenReadFileStreamEventOutput::Read(data).try_into()
             }).await?
         },
         OpenReadFileStreamEventInput::Close { id } => {
@@ -77,12 +62,6 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
             }).await?
         },
     }
-}
-
-struct FileResourceInner {
-    file: std::fs::File,
-    read_limit: Option<u64>,
-    read: u64,
 }
 
 
@@ -129,5 +108,45 @@ impl TryFrom<OpenReadFileStreamEventOutput> for tauri::ipc::Response {
                 Ok(tauri::ipc::Response::new(Vec::new()))
             }
         }
+    }
+}
+
+
+struct FileReader {
+    file: std::fs::File,
+    read_limit: Option<u64>,
+    read: u64,
+}
+
+impl FileReader {
+
+    fn new(file: std::fs::File, read_limit: Option<u64>) -> Self {
+        FileReader {
+            read_limit,
+            read: 0,
+            file,
+        }
+    }
+
+    fn read_chunk(&mut self, len: u64) -> Result<Vec<u8>> {
+        if self.read_limit.is_some_and(|l| l <= self.read) {
+            return Ok(Vec::new())
+        }
+
+        let mut nlimit = len;
+        if let Some(read_limit) = self.read_limit {
+            nlimit = u64::min(nlimit, read_limit.saturating_sub(self.read));
+        }
+
+        let mut buf = Vec::with_capacity(usize::min(nlimit as usize, 2 * 1024 * 1024));
+
+        let nread = self.file
+            .by_ref()
+            .take(nlimit)
+            .read_to_end(&mut buf)?;
+
+        self.read += nread as u64;
+
+        Ok(buf)
     }
 }

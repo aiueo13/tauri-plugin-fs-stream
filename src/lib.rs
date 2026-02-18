@@ -30,10 +30,5 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R, Option<config:
 			cmds::open_write_file_stream,
 			cmds::close_all_file_streams,
 		])
-		.js_init_script(format!(
-            "window.__TAURI_FS_STREAM_PLUGIN_INTERNALS__ = {{ supportsRawIpcRequestBody: {} }};",
-            // https://github.com/tauri-apps/tauri/issues/10573
-			cfg!(not(any(target_os = "android", target_os = "linux")))
-        ))
 		.build()
 }
