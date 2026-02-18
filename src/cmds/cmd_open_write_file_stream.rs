@@ -127,7 +127,7 @@ impl<'a> TryInto<OpenWriteFileStreamEventInput> for tauri::ipc::Request<'a> {
         match event_type {
             "Open" => {
                 // 呼び出し時に body として与えられた判定用の payload をチェックして
-                // raw IPC が可能かどうかを調べる。
+                // 生の body を受け取り可能かどうかを調べる。
                 // <https://github.com/tauri-apps/tauri/issues/10573>
                 let supports_raw_ipc_request_body = match self.body() {
                     tauri::ipc::InvokeBody::Json(_) => false,
