@@ -26,11 +26,11 @@ export type OpenReadFileStreamOptions = {
 	freezeSize?: boolean,
 
 	/**
-   * An `AbortSignal` that allows the read operation to be aborted.
+	 * An `AbortSignal` that allows the read operation to be aborted.
 	 * 
-   * When aborted, the stream enters an errored state, all subsequent read operations fail,
+	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
 	 * and the underlying file handles are released instantly.
-   */
+	 */
 	signal?: AbortSignal,
 
 	/**
@@ -156,11 +156,11 @@ export type OpenReadTextFileLinesStreamOptions = {
 	freezeSize?: boolean,
 
 	/**
-   * An `AbortSignal` that allows the read operation to be aborted.
+	 * An `AbortSignal` that allows the read operation to be aborted.
 	 * 
-   * When aborted, the stream enters an errored state, all subsequent read operations fail,
+	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
 	 * and the underlying file handles are released instantly.
-   */
+	 */
 	signal?: AbortSignal,
 
 	/**
@@ -258,11 +258,11 @@ export type OpenWriteFileStreamOptions = {
 	bufferByteLength?: number,
 
 	/**
-   * An `AbortSignal` that allows the write operation to be aborted.
+	 * An `AbortSignal` that allows the write operation to be aborted.
 	 * 
-   * When aborted, the stream enters an errored state, all subsequent write operations fail,
+	 * When aborted, the stream enters an errored state, all subsequent write operations fail,
 	 * and the underlying file handles are released instantly.
-   */
+	 */
 	signal?: AbortSignal,
 
 	/**
@@ -600,22 +600,22 @@ async function createTextLinesReadableStream(
 	let abortListener: (() => void) | null = null
 	let decoder: TextDecoder | null = null
 	let buffer: Uint8Array<ArrayBuffer> | null = null
-	
+
 	let cleanupPromise: Promise<void> | null = null
 	function cleanup(): Promise<void> {
 		if (cleanupPromise === null) {
-    	cleanupPromise = (async () => {
-      	buffer = null
+			cleanupPromise = (async () => {
+				buffer = null
 				decoder = null
-      	if (signal != null && abortListener != null) {
-        	signal.removeEventListener("abort", abortListener)
+				if (signal != null && abortListener != null) {
+					signal.removeEventListener("abort", abortListener)
 					abortListener = null
-      	}
-      	if (handler.release) {
-        	await handler.release()
-      	}
-    	})()
-  	}
+				}
+				if (handler.release) {
+					await handler.release()
+				}
+			})()
+		}
 		return cleanupPromise
 	}
 
@@ -624,14 +624,14 @@ async function createTextLinesReadableStream(
 	// 複数回行うとエラーが発生した行ではない箇所で read してもエラーになってしまう。
 	return new ReadableStream({
 		start(controller) {
-      if (signal) {
-        abortListener = () => {
-					cleanup().catch(() => {})
+			if (signal) {
+				abortListener = () => {
+					cleanup().catch(() => { })
 					controller.error(signal.reason ?? newAbortError())
 				}
-        signal.addEventListener("abort", abortListener);
-      }
-    },
+				signal.addEventListener("abort", abortListener);
+			}
+		},
 
 		async pull(controller) {
 			try {
@@ -712,31 +712,31 @@ async function createReadableStream(
 	let cleanupPromise: Promise<void> | null = null
 	function cleanup(): Promise<void> {
 		if (cleanupPromise === null) {
-    	cleanupPromise = (async () => {
-      	buffer = null
-      	if (signal != null && abortListener != null) {
-        	signal.removeEventListener("abort", abortListener)
+			cleanupPromise = (async () => {
+				buffer = null
+				if (signal != null && abortListener != null) {
+					signal.removeEventListener("abort", abortListener)
 					abortListener = null
-      	}
-      	if (handler.release) {
-        	await handler.release()
-      	}
-    	})()
-  	}
+				}
+				if (handler.release) {
+					await handler.release()
+				}
+			})()
+		}
 		return cleanupPromise
 	}
 
 	if (!isReadableByteStreamAvailable()) {
 		return new ReadableStream({
 			start(controller) {
-      	if (signal) {
-        	abortListener = () => {
-						cleanup().catch(() => {})
+				if (signal) {
+					abortListener = () => {
+						cleanup().catch(() => { })
 						controller.error(signal.reason ?? newAbortError())
 					}
-        	signal.addEventListener("abort", abortListener);
-      	}
-    	},
+					signal.addEventListener("abort", abortListener);
+				}
+			},
 
 			async pull(controller) {
 				try {
@@ -770,14 +770,14 @@ async function createReadableStream(
 		type: "bytes",
 
 		start(controller) {
-      if (signal) {
-        abortListener = () => {
-					cleanup().catch(() => {})
+			if (signal) {
+				abortListener = () => {
+					cleanup().catch(() => { })
 					controller.error(signal.reason ?? newAbortError())
 				}
-        signal.addEventListener("abort", abortListener)
-      }
-    },
+				signal.addEventListener("abort", abortListener)
+			}
+		},
 
 		async pull(controller) {
 			try {
@@ -860,30 +860,30 @@ async function createBufferedWritableStream(
 	let cleanupPromise: Promise<void> | null = null;
 	function cleanup(): Promise<void> {
 		if (cleanupPromise === null) {
-    	cleanupPromise = (async () => {
-      	buffer = null
-      	if (signal != null && abortListener != null) {
-        	signal.removeEventListener("abort", abortListener)
+			cleanupPromise = (async () => {
+				buffer = null
+				if (signal != null && abortListener != null) {
+					signal.removeEventListener("abort", abortListener)
 					abortListener = null
-      	}
-      	if (handler.release) {
-        	await handler.release()
-      	}
-    	})()
-  	}
+				}
+				if (handler.release) {
+					await handler.release()
+				}
+			})()
+		}
 		return cleanupPromise
 	}
 
 	return new WritableStream<Uint8Array<ArrayBufferLike>>({
 		start(controller) {
-      if (signal) {
-        abortListener = () => {
-					cleanup().catch(() => {})
+			if (signal) {
+				abortListener = () => {
+					cleanup().catch(() => { })
 					controller.error(signal.reason ?? newAbortError())
 				}
-        signal.addEventListener("abort", abortListener);
-      }
-    },
+				signal.addEventListener("abort", abortListener);
+			}
+		},
 
 		async write(src) {
 			try {
