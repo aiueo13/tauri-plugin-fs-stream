@@ -14,7 +14,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
     config: PluginConfigState<'_>,
 ) -> Result<OpenWriteFileStreamEventOutput> {
 
-    type FileResource = PluginResource<std::sync::Mutex<std::fs::File>>;
+    type FileResource = std::sync::Mutex<std::fs::File>;
 
     
     let resources = std::sync::Arc::clone(&resources);
@@ -35,7 +35,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
             tauri::async_runtime::spawn_blocking(move || {
                 let file_options = std::fs::OpenOptions::from(&options);
                 let file = file_options.open(path)?;
-                let res = FileResource::new(std::sync::Mutex::new(file));
+                let res: FileResource = std::sync::Mutex::new(file);
                 let id = resources.add(res)?;
                 Ok(OpenWriteFileStreamEventOutput::Open { id, supports_raw_ipc_request_body })
             }).await?
@@ -44,7 +44,6 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
             tauri::async_runtime::spawn_blocking(move || {
                 resources
                     .get::<FileResource>(id)?
-                    .get()
                     .lock()?
                     .write_all(&data)?;
 

@@ -8,24 +8,6 @@ pub fn convert_rid_to_bytes(rid: tauri::ResourceId) -> Vec<u8> {
     rid.to_be_bytes().to_vec()
 }
 
-pub struct PluginResource<T> {
-    resource: std::sync::Arc<T>
-}
-
-impl<T> PluginResource<T> {
-
-    pub fn new(resource: T) -> Self {
-        Self { resource: std::sync::Arc::new(resource) }
-    }
-
-    pub fn get(&self) -> std::sync::Arc<T> {
-        std::sync::Arc::clone(&self.resource)
-    }
-}
-
-impl<T: Sync + Send + 'static> tauri::Resource for PluginResource<T> {}
-
-
 // Based on code from tauri-plugin-fs crate
 //
 // Source:

@@ -26,6 +26,14 @@ export type OpenReadFileStreamOptions = {
 	freezeSize?: boolean,
 
 	/**
+   * An `AbortSignal` that allows the read operation to be aborted.
+	 * 
+   * When aborted, the stream enters an errored state, all subsequent read operations fail,
+	 * and the underlying file handles are released instantly.
+   */
+	signal?: AbortSignal,
+
+	/**
 	 * Base directory for `path`.
 	 */
 	baseDir?: BaseDirectory
@@ -40,11 +48,10 @@ export type OpenReadFileStreamOptions = {
  * - When the ReadableStream or its Reader is canceled. 
  * - When the ReadableStream's Reader has been fully read. 
  * - When the ReadableStream's Reader's read operation ends with an error. 
- * 
- * These releases may be performed multiple times without issue.
+ * - When the provided AbortSignal fires an abort event.
  * 
  * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `bufferByteLength`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
+ * @param options - Optional settings: `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -53,6 +60,7 @@ export async function openReadFileStream(
 	options?: OpenReadFileStreamOptions
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
 
+	throwIfAborted(options?.signal)
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
 	const freezeSize = options?.freezeSize ?? true
 	const { open, read, close } = await resolveReadFileStreamEvents(
@@ -60,13 +68,17 @@ export async function openReadFileStream(
 		mapFsPathForInput(path),
 		{ baseDir: options?.baseDir, freezeSize }
 	)
+	throwIfAborted(options?.signal)
 
 	try {
 		await open()
-		return createReadableStream({
-			read: () => read(bufferByteLength),
-			release: close
-		})
+		return await createReadableStream(
+			{
+				read: () => read(bufferByteLength),
+				release: close
+			},
+			options?.signal
+		)
 	}
 	catch (e) {
 		await close().catch(() => { })
@@ -144,6 +156,14 @@ export type OpenReadTextFileLinesStreamOptions = {
 	freezeSize?: boolean,
 
 	/**
+   * An `AbortSignal` that allows the read operation to be aborted.
+	 * 
+   * When aborted, the stream enters an errored state, all subsequent read operations fail,
+	 * and the underlying file handles are released instantly.
+   */
+	signal?: AbortSignal,
+
+	/**
 	 * Base directory for `path`.
 	 */
 	baseDir?: BaseDirectory,
@@ -180,11 +200,10 @@ export type OpenReadTextFileLinesStreamItem = {
  * - When the ReadableStream or its Reader is canceled. 
  * - When the ReadableStream's Reader has been fully read. 
  * - When the ReadableStream's Reader's read operation ends with an error. 
- * 
- * These releases may be performed multiple times without issue.
+ * - When the provided AbortSignal fires an abort event.
  * 
  * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `freezeSize`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
+ * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -193,6 +212,7 @@ export async function openReadTextFileLinesStream(
 	options?: OpenReadTextFileLinesStreamOptions,
 ): Promise<ReadableStream<OpenReadTextFileLinesStreamItem>> {
 
+	throwIfAborted(options?.signal)
 	const maxLineByteLength = mapMaxLineByteLength(options?.maxLineByteLength)
 	const bufferSize = mapBufferByteLengthForInput(options?.bufferByteLength)
 	const label = mapEncodingLabelForInput(options?.encoding)
@@ -204,6 +224,7 @@ export async function openReadTextFileLinesStream(
 		mapFsPathForInput(path),
 		{ baseDir: options?.baseDir, freezeSize }
 	)
+	throwIfAborted(options?.signal)
 
 	try {
 		await open({ label, maxLineByteLength, ignoreBOM })
@@ -212,7 +233,8 @@ export async function openReadTextFileLinesStream(
 				read: () => read(bufferSize),
 				release: close
 			},
-			{ label, fatal }
+			{ label, fatal },
+			options?.signal
 		)
 	}
 	catch (e) {
@@ -234,6 +256,14 @@ export type OpenWriteFileStreamOptions = {
 	 * Defaults to `524288` (512 KiB).
 	 */
 	bufferByteLength?: number,
+
+	/**
+   * An `AbortSignal` that allows the write operation to be aborted.
+	 * 
+   * When aborted, the stream enters an errored state, all subsequent write operations fail,
+	 * and the underlying file handles are released instantly.
+   */
+	signal?: AbortSignal,
 
 	/**
 	 * Indicates whether the data should be appended from the end of the file instead of overwriting the existing content.
@@ -280,11 +310,10 @@ export type OpenWriteFileStreamOptions = {
  * - When the WritableStream or its Writer is closed. 
  * - When the WritableStream or its Writer is aborted. 
  * - When the WritableStream's Writer's write operation ends with an error. 
- * 
- * These releases may be performed multiple times without issue.
+ * - When the provided AbortSignal fires an abort event.
  * 
  * @param path - The file path or file scheme URL write to. 
- * @param options - Optional settings: `bufferByteLength`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for detailed descriptions of each item.
+ * @param options - Optional settings: `bufferByteLength`, `signal`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for detailed descriptions of each item.
  * 
  * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
  */
@@ -293,6 +322,7 @@ export async function openWriteFileStream(
 	options?: OpenWriteFileStreamOptions
 ): Promise<WritableStream<Uint8Array<ArrayBufferLike>>> {
 
+	throwIfAborted(options?.signal)
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
 	const fileOptions = {
 		append: options?.append ?? false,
@@ -306,13 +336,18 @@ export async function openWriteFileStream(
 		mapFsPathForInput(path),
 		fileOptions,
 	)
+	throwIfAborted(options?.signal)
 
 	try {
 		await open()
-		return createBufferedWritableStream(bufferByteLength, {
-			write,
-			release: close
-		})
+		return await createBufferedWritableStream(
+			{
+				write,
+				release: close
+			},
+			bufferByteLength,
+			options?.signal
+		)
 	}
 	catch (e) {
 		await close().catch(() => { })
@@ -324,7 +359,7 @@ export async function openWriteFileStream(
 /**
  * Forcibly disposes of all file streams.
  *
- * All backend file resources owned by `ReadableStream` and `WritableStream` instances 
+ * All backend file resources owned by file stream instances 
  * created by this plugin are detached from the frontend and released.
  * 
  * After this operation, any read or write operation on existing streams will result in an error, 
@@ -453,7 +488,7 @@ async function resolveWriteFileStreamEvents(
 	}
 
 
-	const PAYLOAD_FOR_CHCKING_RAW_IPC_REQUEST_BODY_SUPPROTED = new Uint8Array([0]);
+	const PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPROTED = new Uint8Array([0]);
 
 	let id: string | null = null
 	let supportsRawIpcRequestBody: boolean | null = null
@@ -463,13 +498,13 @@ async function resolveWriteFileStreamEvents(
 			if (id !== null) throw new Error("File already opened")
 
 			const res = await dispatch("Open",
-				PAYLOAD_FOR_CHCKING_RAW_IPC_REQUEST_BODY_SUPPROTED,
+				PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPROTED,
 				{
 					path: encodeURIComponent(path),
 					options: encodeURIComponent(JSON.stringify(options))
 				}
 			)
-			
+
 			supportsRawIpcRequestBody = res.supportsRawIpcRequestBody
 			id = res.id.toString()
 		},
@@ -522,19 +557,14 @@ async function createTextLinesReadableStream(
 	options?: {
 		fatal?: boolean,
 		label?: string,
-	}
+	},
+	signal?: AbortSignal
 ): Promise<ReadableStream<{
 	line: string,
 	lineBreak: "\n" | "\r\n" | null
 }>> {
 
-	let releasePromise: Promise<void> | null = null
-	const releaseOnce = () => {
-		if (!releasePromise) {
-			releasePromise = (handler.release ?? (async () => { }))()
-		}
-		return releasePromise
-	}
+	throwIfAborted(signal)
 
 	/*
 	 * bytes は以下の形式のレコードが連続したものであり、
@@ -567,22 +597,51 @@ async function createTextLinesReadableStream(
 	const LINE_BREAK_LF = 1
 	const LINE_BREAK_CRLF = 2
 
+	let abortListener: (() => void) | null = null
 	let decoder: TextDecoder | null = null
 	let buffer: Uint8Array<ArrayBuffer> | null = null
+	
+	let cleanupPromise: Promise<void> | null = null
+	function cleanup(): Promise<void> {
+		if (cleanupPromise === null) {
+    	cleanupPromise = (async () => {
+      	buffer = null
+				decoder = null
+      	if (signal != null && abortListener != null) {
+        	signal.removeEventListener("abort", abortListener)
+					abortListener = null
+      	}
+      	if (handler.release) {
+        	await handler.release()
+      	}
+    	})()
+  	}
+		return cleanupPromise
+	}
 
 	// エラーはその原因となった行を読み込んだ際に発生させたいため、
 	// 1回の pull では1回だけ enqueue　を行う。
 	// 複数回行うとエラーが発生した行ではない箇所で read してもエラーになってしまう。
 	return new ReadableStream({
+		start(controller) {
+      if (signal) {
+        abortListener = () => {
+					cleanup().catch(() => {})
+					controller.error(signal.reason ?? newAbortError())
+				}
+        signal.addEventListener("abort", abortListener);
+      }
+    },
+
 		async pull(controller) {
 			try {
+				throwIfAborted(signal)
 				if (buffer == null || buffer.byteLength === 0) {
 					buffer = await handler.read()
+					throwIfAborted(signal)
 				}
 				if (buffer == null || buffer.byteLength === 0) {
-					decoder = null
-					buffer = null
-					await releaseOnce()
+					await cleanup()
 					controller.close()
 					return
 				}
@@ -620,21 +679,18 @@ async function createTextLinesReadableStream(
 				}
 				const line = decoder.decode(lineBytes)
 
+				throwIfAborted(signal)
 				controller.enqueue({ line, lineBreak })
 				buffer = buffer.subarray(LINE_OFFSET + lineLen)
 			}
 			catch (e) {
-				decoder = null
-				buffer = null
-				await releaseOnce().catch(() => { })
+				await cleanup().catch(() => { })
 				throw e
 			}
 		},
 
 		async cancel() {
-			decoder = null
-			buffer = null
-			await releaseOnce()
+			await cleanup()
 		}
 	})
 }
@@ -645,23 +701,50 @@ async function createReadableStream(
 		read: () => Promise<Uint8Array<ArrayBuffer> | null>,
 		release?: () => Promise<void>
 	},
+	signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
 
-	let releasePromise: Promise<void> | null = null
-	const releaseOnce = () => {
-		if (!releasePromise) {
-			releasePromise = (handler.release ?? (async () => { }))()
-		}
-		return releasePromise
+	throwIfAborted(signal)
+
+	let abortListener: (() => void) | null = null
+	let buffer: Uint8Array<ArrayBuffer> | null = null
+
+	let cleanupPromise: Promise<void> | null = null
+	function cleanup(): Promise<void> {
+		if (cleanupPromise === null) {
+    	cleanupPromise = (async () => {
+      	buffer = null
+      	if (signal != null && abortListener != null) {
+        	signal.removeEventListener("abort", abortListener)
+					abortListener = null
+      	}
+      	if (handler.release) {
+        	await handler.release()
+      	}
+    	})()
+  	}
+		return cleanupPromise
 	}
 
 	if (!isReadableByteStreamAvailable()) {
 		return new ReadableStream({
+			start(controller) {
+      	if (signal) {
+        	abortListener = () => {
+						cleanup().catch(() => {})
+						controller.error(signal.reason ?? newAbortError())
+					}
+        	signal.addEventListener("abort", abortListener);
+      	}
+    	},
+
 			async pull(controller) {
 				try {
+					throwIfAborted(signal)
 					const data = await handler.read()
+					throwIfAborted(signal)
 					if (data == null || data.byteLength === 0) {
-						await releaseOnce()
+						await cleanup()
 						controller.close()
 						return
 					}
@@ -669,18 +752,16 @@ async function createReadableStream(
 					controller.enqueue(data)
 				}
 				catch (e) {
-					await releaseOnce().catch(() => { })
+					await cleanup().catch(() => { })
 					throw e
 				}
 			},
 
 			async cancel() {
-				await releaseOnce()
+				await cleanup()
 			}
 		})
 	}
-
-	let buffer: Uint8Array<ArrayBuffer> | null = null
 
 	// autoAllocateChunkSize を指定すると stream.getReader() でも byob が使われるようになるが、
 	// この実装で byob を用いてもコピーが増えるだけで恩恵が少ないため指定しない。
@@ -688,14 +769,25 @@ async function createReadableStream(
 	return new ReadableStream({
 		type: "bytes",
 
+		start(controller) {
+      if (signal) {
+        abortListener = () => {
+					cleanup().catch(() => {})
+					controller.error(signal.reason ?? newAbortError())
+				}
+        signal.addEventListener("abort", abortListener)
+      }
+    },
+
 		async pull(controller) {
 			try {
+				throwIfAborted(signal)
 				if (buffer == null || buffer.byteLength === 0) {
 					buffer = await handler.read()
+					throwIfAborted(signal)
 				}
 				if (buffer == null || buffer.byteLength === 0) {
-					buffer = null
-					await releaseOnce()
+					await cleanup()
 
 					// byobRequest がある場合、respond を呼ばないと promise　が解決されない。
 					// controller.close() の後だと respond(0) を読んでもエラーにはならない。
@@ -715,16 +807,18 @@ async function createReadableStream(
 
 					view.set(buffer.subarray(0, nread))
 					buffer = buffer.subarray(nread)
+
+					throwIfAborted(signal)
 					byob.respond(nread)
 				}
 				else {
+					throwIfAborted(signal)
 					controller.enqueue(buffer)
 					buffer = null
 				}
 			}
 			catch (e) {
-				buffer = null
-				await releaseOnce().catch(() => { })
+				await cleanup().catch(() => { })
 
 				// byobRequest が存在する場合、controller.close() を呼んだだけでは
 				// Promise は解決されず、respond() も呼ぶ必要がある。
@@ -735,8 +829,7 @@ async function createReadableStream(
 		},
 
 		async cancel() {
-			buffer = null
-			await releaseOnce()
+			await cleanup()
 		}
 	})
 }
@@ -746,50 +839,73 @@ async function createReadableStream(
  * 必要な場合はコピーしてから用いる必要がある。
  */
 async function createBufferedWritableStream(
-	bufferSize: number,
 	handler: {
 		write: (chunk: Uint8Array<ArrayBuffer>) => Promise<void>,
 		release?: () => Promise<void>
 	},
+	bufferSize: number,
+	signal?: AbortSignal,
 ): Promise<WritableStream<Uint8Array<ArrayBufferLike>>> {
+
+	throwIfAborted(signal)
 
 	if (!Number.isSafeInteger(bufferSize) || bufferSize <= 0) {
 		throw new Error("bufferSize must be a positive safe integer")
 	}
 
-	let releasePromise: Promise<void> | null = null
-	const releaseOnce = () => {
-		if (!releasePromise) {
-			releasePromise = (handler.release ?? (async () => { }))()
-		}
-		return releasePromise
-	}
-
+	let abortListener: (() => void) | null = null;
 	let buffer: Uint8Array<ArrayBuffer> | null = new Uint8Array(bufferSize)
 	let bufferOffset = 0;
 
+	let cleanupPromise: Promise<void> | null = null;
+	function cleanup(): Promise<void> {
+		if (cleanupPromise === null) {
+    	cleanupPromise = (async () => {
+      	buffer = null
+      	if (signal != null && abortListener != null) {
+        	signal.removeEventListener("abort", abortListener)
+					abortListener = null
+      	}
+      	if (handler.release) {
+        	await handler.release()
+      	}
+    	})()
+  	}
+		return cleanupPromise
+	}
+
 	return new WritableStream<Uint8Array<ArrayBufferLike>>({
+		start(controller) {
+      if (signal) {
+        abortListener = () => {
+					cleanup().catch(() => {})
+					controller.error(signal.reason ?? newAbortError())
+				}
+        signal.addEventListener("abort", abortListener);
+      }
+    },
+
 		async write(src) {
 			try {
 				if (buffer == null) throw new Error("Buffer missing")
 
 				let srcOffset = 0;
-
 				while (srcOffset < src.byteLength) {
+					throwIfAborted(signal)
 					const n = Math.min(bufferSize - bufferOffset, src.byteLength - srcOffset)
 					buffer.set(src.subarray(srcOffset, srcOffset + n), bufferOffset)
 					bufferOffset += n
 					srcOffset += n
 
 					if (bufferOffset === bufferSize) {
+						throwIfAborted(signal)
 						await handler.write(buffer)
 						bufferOffset = 0
 					}
 				}
 			}
 			catch (e) {
-				buffer = null
-				await releaseOnce().catch(() => { })
+				await cleanup().catch(() => { })
 				throw e
 			}
 		},
@@ -801,16 +917,24 @@ async function createBufferedWritableStream(
 				}
 			}
 			finally {
-				buffer = null
-				await releaseOnce()
+				await cleanup()
 			}
 		},
 
 		async abort() {
-			buffer = null
-			await releaseOnce()
+			await cleanup()
 		}
 	})
+}
+
+function throwIfAborted(signal: AbortSignal | undefined | null) {
+	if (signal?.aborted === true) {
+		throw (signal?.reason ?? newAbortError())
+	}
+}
+
+function newAbortError(): DOMException {
+	return new DOMException("The operation was aborted.", "AbortError")
 }
 
 async function bytesToDataUrl(bytes: Uint8Array<ArrayBufferLike>): Promise<string> {

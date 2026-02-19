@@ -13,7 +13,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
     config: PluginConfigState<'_>,
 ) -> Result<tauri::ipc::Response> {
 
-    type FileReaderResource = PluginResource<std::sync::Mutex<FileReader>>;
+    type FileResource = std::sync::Mutex<FileReader>;
 
     
     let resources = std::sync::Arc::clone(&resources);
@@ -38,7 +38,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
                 };
 
                 let res = FileReader::new(file, read_limit);
-                let res = FileReaderResource::new(std::sync::Mutex::new(res));
+                let res: FileResource = std::sync::Mutex::new(res);
                 let id = resources.add(res)?;
 
                 OpenReadFileStreamEventOutput::Open(id).try_into()
@@ -47,8 +47,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
         OpenReadFileStreamEventInput::Read { id, len } => {
             tauri::async_runtime::spawn_blocking(move || -> Result<_> {
                 let data = resources
-                    .get::<FileReaderResource>(id)?
-                    .get()
+                    .get::<FileResource>(id)?
                     .lock()?
                     .read_chunk(len)?;
                 

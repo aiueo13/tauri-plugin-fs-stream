@@ -36,14 +36,15 @@ impl<R: tauri::Runtime> PluginResources<R> {
         }
     }
 
-    pub fn add(&self, r: impl tauri::Resource) -> Result<tauri::ResourceId> {
-        let id = self.app.resources_table().add(r);
+    pub fn add<T: Sync + Send + 'static>(&self, r: T) -> Result<tauri::ResourceId> {
+        let id = self.app.resources_table().add(PluginResource::new(r));
         self.list.lock()?.insert(id);
         Ok(id)
     }
 
-    pub fn get<T: tauri::Resource>(&self, id: tauri::ResourceId) -> Result<std::sync::Arc<T>> {
-        Ok(self.app.resources_table().get(id)?)
+    pub fn get<T: Sync + Send + 'static>(&self, id: tauri::ResourceId) -> Result<std::sync::Arc<T>> {
+        let r = self.app.resources_table().get::<PluginResource<T>>(id)?;
+        Ok(std::sync::Arc::clone(&r.resource))
     }
 
     pub fn close(&self, id: tauri::ResourceId) -> Result<()> {  
@@ -74,3 +75,16 @@ impl<R: tauri::Runtime> PluginResources<R> {
         Ok(())
     }
 }
+
+struct PluginResource<T> {
+    resource: std::sync::Arc<T>
+}
+
+impl<T> PluginResource<T> {
+
+    fn new(resource: T) -> Self {
+        Self { resource: std::sync::Arc::new(resource) }
+    }
+}
+
+impl<T: Sync + Send + 'static> tauri::Resource for PluginResource<T> {}

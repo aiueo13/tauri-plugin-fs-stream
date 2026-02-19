@@ -1,3 +1,7 @@
+# ver. 0.6
+- ドキュメントを変更。
+- openReadFileStream, openWriteFileStream, openReadTextFileLinesStream の引数に options.signal を追加。
+
 # ver. 0.5
 - 特定の条件における openWriteFileStream のパフォーマンスを改善。
 

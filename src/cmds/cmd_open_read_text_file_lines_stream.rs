@@ -13,7 +13,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
     config: PluginConfigState<'_>,
 ) -> Result<tauri::ipc::Response> {
 
-    type FileReaderResource = PluginResource<std::sync::Mutex<FileReader>>;
+    type FileReaderResource = std::sync::Mutex<FileReader>;
 
 
     let resources = std::sync::Arc::clone(&resources);
@@ -44,7 +44,7 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
                 let max_line_len = std::num::NonZeroU64::new(max_line_len);
 
                 let res = FileReader::new(file, max_line_len, line_breaks, bom, read_limit);
-                let res = FileReaderResource::new(std::sync::Mutex::new(res));
+                let res: FileReaderResource = std::sync::Mutex::new(res);
                 let id = resources.add(res)?;
 
                 Ok(OpenReadFileStreamEventOutput::Open(id).try_into()?)
@@ -54,7 +54,6 @@ pub async fn open_read_text_file_lines_stream<R: tauri::Runtime>(
             tauri::async_runtime::spawn_blocking(move || -> Result<_> {
                 let lines = resources
                     .get::<FileReaderResource>(id)?
-                    .get()
                     .lock()?
                     .read_lines_framed(len)?;
                  
