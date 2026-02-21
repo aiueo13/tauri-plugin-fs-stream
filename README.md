@@ -91,9 +91,14 @@ async function convertFile(
 # File Access
 Access control for file paths follows [the same model as the fs plugin](https://v2.tauri.app/reference/javascript/fs/#security).
 
-This plugin prevents path traversal and can access only the paths explicitly declared in the capability file. In that case, you can also configure `plugins.fs-stream.requireLiteralLeadingDot` in `src-tauri/tauri.conf.json` like with the fs plugin.
+This plugin prevents path traversal and can access only the paths explicitly declared in the capability file. 
 
-An exception applies to files that the user explicitly selects through drag and drop or via  [the dialog plugin](https://v2.tauri.app/plugin/dialog/). Such files are accessible even if they are not declared in the capability configuration. And these permissions can be persisted using [the persisted scope plugin](https://v2.tauri.app/plugin/persisted-scope/), allowing access to remain available across application restarts. Note that to use these features, the fs plugin must be registered in your Tauri project. In other words, `tauri_plugin_fs::init()` must be in `src-tauri/src/lib.rs`.
+An exception applies to files that the user explicitly selects through drag and drop or via  [the dialog plugin](https://v2.tauri.app/plugin/dialog/). Such files are accessible even if they are not declared in the capability configuration. And these permissions can be persisted using [the persisted scope plugin](https://v2.tauri.app/plugin/persisted-scope/), allowing access to remain available across application restarts. Note that to use these features, the fs plugin must be [set up in your Tauri project](https://v2.tauri.app/plugin/file-system/#setup). 
+
+# Optional Settings
+As with the fs plugin, you can configure `plugins.fs-stream.requireLiteralLeadingDot` in `src-tauri/tauri.conf.json`.
+
+You can also use the `"fs-stream:scope"` permission in the capability file to define allowed and denied paths for all commands.
 
 # License
 This project is licensed under either of
