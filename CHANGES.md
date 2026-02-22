@@ -1,3 +1,8 @@
+# ver. 0.7
+- ドキュメントを変更。
+- countAllFileStreams を追加。
+- エラーメッセージを変更。
+
 # ver. 0.6
 - ドキュメントを変更。
 - openReadFileStream, openWriteFileStream, openReadTextFileLinesStream の引数に options.signal を追加。
