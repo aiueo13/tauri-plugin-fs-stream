@@ -40,6 +40,32 @@ Denies the close_all_file_streams command without any pre-configured scope.
 <tr>
 <td>
 
+`fs-stream:allow-count-all-file-streams`
+
+</td>
+<td>
+
+Enables the count_all_file_streams command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-stream:deny-count-all-file-streams`
+
+</td>
+<td>
+
+Denies the count_all_file_streams command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `fs-stream:allow-open-read-file-stream`
 
 </td>

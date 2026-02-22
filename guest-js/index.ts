@@ -29,7 +29,7 @@ export type OpenReadFileStreamOptions = {
 	 * An `AbortSignal` that allows the read operation to be aborted.
 	 * 
 	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
-	 * and the underlying file handles are released instantly.
+	 * and the underlying file resources are released instantly.
 	 */
 	signal?: AbortSignal,
 
@@ -159,7 +159,7 @@ export type OpenReadTextFileLinesStreamOptions = {
 	 * An `AbortSignal` that allows the read operation to be aborted.
 	 * 
 	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
-	 * and the underlying file handles are released instantly.
+	 * and the underlying file resources are released instantly.
 	 */
 	signal?: AbortSignal,
 
@@ -261,7 +261,7 @@ export type OpenWriteFileStreamOptions = {
 	 * An `AbortSignal` that allows the write operation to be aborted.
 	 * 
 	 * When aborted, the stream enters an errored state, all subsequent write operations fail,
-	 * and the underlying file handles are released instantly.
+	 * and the underlying file resources are released instantly.
 	 */
 	signal?: AbortSignal,
 
@@ -360,13 +360,23 @@ export async function openWriteFileStream(
  * Forcibly disposes of all file streams.
  *
  * All backend file resources owned by file stream instances 
- * created by this plugin are detached from the frontend and released.
+ * created by this plugin are detached from frontend and released.
  * 
  * After this operation, any read or write operation on existing streams will result in an error, 
  * except for buffering on the frontend.
  */
 export async function closeAllFileStreams(): Promise<void> {
 	await invoke("plugin:fs-stream|close_all_file_streams")
+}
+
+/**
+ * Retrieves the number of all currently active file streams.
+ *
+ * This counts all backend file resources owned by file stream instances
+ * created by this plugin that have not yet been detached from frontend and released.
+ */
+export async function countAllFileStreams(): Promise<number> {
+	return await invoke("plugin:fs-stream|count_all_file_streams")
 }
 
 
@@ -376,7 +386,7 @@ const DEFAULT_BUFFER_SIZE_FOR_IPC = 512 * 1024;
 function mapBufferByteLengthForInput(s?: number): number {
 	const bufferSize = s ?? DEFAULT_BUFFER_SIZE_FOR_IPC
 	if (!isNonzeroSafeInt(bufferSize)) {
-		throw new Error(`Invalid bufferByteLength: expected a non-zero safe unsigned integer (1..Number.MAX_SAFE_INTEGER), got ${bufferSize}`)
+		throw new Error("Invalid bufferByteLength: expected a non-zero safe unsigned integer (1..Number.MAX_SAFE_INTEGER)")
 	}
 	return bufferSize
 }
@@ -386,7 +396,7 @@ function mapEncodingLabelForInput(label?: string): string {
 		return (new TextDecoder(label)).encoding
 	}
 	catch {
-		throw new RangeError(`Bad encoding label: ${label}`)
+		throw new RangeError("Bad encoding label")
 	}
 }
 
@@ -394,7 +404,7 @@ function mapMaxLineByteLength(s?: number): number {
 	if (s == null) return 0
 
 	if (!Number.isSafeInteger(s) || s < 0) {
-		throw new Error(`Invalid maxLineByteLength: expected a safe unsigned integer, got ${s}`);
+		throw new Error("Invalid maxLineByteLength: expected a safe unsigned integer");
 	}
 
 	return s
@@ -647,7 +657,7 @@ async function createTextLinesReadableStream(
 				}
 
 				if (buffer.byteLength < LINE_OFFSET) {
-					throw new Error(`Invalid data: Chunk ended with partial header. (${buffer.byteLength} bytes remained)`)
+					throw new Error("Invalid data: Chunk ended with partial header.")
 				}
 				const lineLen = trySafeU64FromBytes(
 					buffer.subarray(LINE_LEN_OFFSET, LINE_LEN_OFFSET + LINE_LEN_LEN),
@@ -655,7 +665,7 @@ async function createTextLinesReadableStream(
 				)
 
 				if (buffer.byteLength < LINE_OFFSET + lineLen) {
-					throw new Error(`Invalid data: Line split detected. Expected ${lineLen} bytes body, but only ${buffer.byteLength - LINE_OFFSET} bytes remained in chunk.`)
+					throw new Error("Invalid data: Line split detected")
 				}
 				const lineBytes = buffer.subarray(LINE_OFFSET, LINE_OFFSET + lineLen)
 
@@ -990,7 +1000,7 @@ function isNonzeroSafeInt(num: number): boolean {
 }
 
 function isSafeInt(num: number): boolean {
-	return Number.isSafeInteger(num) && 0 <= num && num <= Number.MAX_SAFE_INTEGER
+	return Number.isSafeInteger(num) && 0 <= num
 }
 
 function ridFromBytes(bytes: ArrayBufferView | ArrayBuffer): number {
@@ -1009,7 +1019,7 @@ function u32FromBytes(
 			: new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
 
 	if (bytes.length !== 4) {
-		throw new Error(`Expected 4 bytes for u32, got ${bytes.length}`);
+		throw new Error("Expected 4 bytes for u32");
 	}
 
 	if (endian === "bigEndian") {
@@ -1025,7 +1035,7 @@ function u32FromBytes(
 function numToFlag(flag: number): boolean {
 	if (flag === 1) return true
 	if (flag === 0) return false
-	throw new Error(`Invalid flag value: ${flag}`)
+	throw new Error("Invalid flag value")
 }
 
 function trySafeU64FromBytes(
@@ -1040,7 +1050,7 @@ function trySafeU64FromBytes(
 			: new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
 
 	if (bytes.length !== 8) {
-		throw new Error(`Expected 8 bytes for u64, got ${bytes.length}`);
+		throw new Error("Expected 8 bytes for u64");
 	}
 
 	if (endian === "bigEndian") {

@@ -15,19 +15,19 @@ pub struct PluginConfig {
 
 
 
-pub type PluginResourcesState<'a, R> = tauri::State<'a, PluginResourcesStateInner<R>>;
-pub type PluginResourcesStateInner<R> = std::sync::Arc::<PluginResources<R>>;
+pub type PluginFileResourcesState<'a, R> = tauri::State<'a, PluginFileResourcesStateInner<R>>;
+pub type PluginFileResourcesStateInner<R> = std::sync::Arc::<PluginFileResources<R>>;
 
-pub fn new_plugin_resources_state<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> PluginResourcesStateInner<R> {
-    std::sync::Arc::new(PluginResources::new(app))
+pub fn new_plugin_file_resources_state<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> PluginFileResourcesStateInner<R> {
+    std::sync::Arc::new(PluginFileResources::new(app))
 }
 
-pub struct PluginResources<R: tauri::Runtime> {
+pub struct PluginFileResources<R: tauri::Runtime> {
     list: std::sync::Mutex<std::collections::HashSet<tauri::ResourceId>>,
     app: tauri::AppHandle<R>,
 }
 
-impl<R: tauri::Runtime> PluginResources<R> {
+impl<R: tauri::Runtime> PluginFileResources<R> {
 
     fn new(app: tauri::AppHandle<R>) -> Self {
         Self {
@@ -54,16 +54,14 @@ impl<R: tauri::Runtime> PluginResources<R> {
         if rt.has(id) {
             rt.close(id)?;
         }
+
         Ok(())
     }
 
     pub fn close_all(&self) -> Result<()> {
-        let ids: Vec<_> = {
-            let mut locked = self.list.lock()?;
-            let ids = locked.iter().copied().collect();
-            locked.clear();
-            ids
-        };
+        let ids = self.list.lock()?
+            .drain()
+            .collect::<Vec<tauri::ResourceId>>();
 
         let mut rt = self.app.resources_table();
         for id in ids {
@@ -73,6 +71,23 @@ impl<R: tauri::Runtime> PluginResources<R> {
         }
 
         Ok(())
+    }
+
+    pub fn count(&self) -> Result<usize> {
+        let ids = self.list.lock()?
+            .iter()
+            .cloned()
+            .collect::<Vec<tauri::ResourceId>>();
+
+        let mut count = 0;
+        let rt = self.app.resources_table();
+        for id in ids {
+            if rt.has(id) {
+                count += 1;
+            }
+        }
+
+        Ok(count)
     }
 }
 

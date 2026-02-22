@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-fs-stream"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["OkaYu"]
 description = "File Streaming API for Tauri"
 edition = "2021"

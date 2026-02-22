@@ -2,7 +2,7 @@ Note: **I’m using a translation tool, so there may be some inappropriate expre
 
 # Overview
 
-This plugin provides functions that create `ReadableStream` and  `WritableStream` from a file path.
+This plugin provides commands that create `ReadableStream` and  `WritableStream` from a file path.
 
 # Setup
 First, install this plugin to your Tauri project:
@@ -11,7 +11,7 @@ First, install this plugin to your Tauri project:
 
 ```toml
 [dependencies]
-tauri-plugin-fs-stream = "=0.6.0"
+tauri-plugin-fs-stream = "=0.7.0"
 ```
 
 Next, register this plugin in your Tauri project:
@@ -39,10 +39,6 @@ Then, set the APIs and file paths that can be used from the Javascript:
             "allow": ["$APPDATA/my-data/**/*"]
         },
         {
-            "identifier": "fs-stream:allow-open-read-text-file-lines-stream",
-            "allow": ["$APPDATA/my-data/**/*"]
-        },
-        {
             "identifier": "fs-stream:allow-open-write-file-stream",
             "allow": ["$APPDATA/my-data/**/*"],
             "deny": ["$APPDATA/my-data/readonly/**/*"]
@@ -54,14 +50,22 @@ Then, set the APIs and file paths that can be used from the Javascript:
 Finally, install the JavaScript Guest bindings using whichever JavaScript package manager you prefer:
 
 ```bash
-pnpm add tauri-plugin-fs-stream-api@0.6.0 -E
+pnpm add tauri-plugin-fs-stream-api@0.7.0 -E
 # or
-npm install tauri-plugin-fs-stream-api@0.6.0 --save-exact
+npm install tauri-plugin-fs-stream-api@0.7.0 --save-exact
 # or
-yarn add tauri-plugin-fs-stream-api@0.6.0 --exact
+yarn add tauri-plugin-fs-stream-api@0.7.0 --exact
 ```
 
 **NOTE**: Please make sure that the Rust-side [`tauri-plugin-fs-stream`](https://crates.io/crates/tauri-plugin-fs-stream) and the JavaScript-side [`tauri-plugin-fs-stream-api`](https://www.npmjs.com/package/tauri-plugin-fs-stream-api?activeTab=readme) versions match exactly.
+
+# API
+This plugin provides the following commands:
+- `openReadFileStream`
+- `openReadTextFileLinesStream`
+- `openWriteFileStream`
+- `closeAllFileStreams`
+- `countAllFileStreams`
 
 # Example
 ```typescript

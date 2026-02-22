@@ -21,7 +21,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R, Option<config:
                 .and_then(|c| c.require_literal_leading_dot);
 
 			app.manage(new_plugin_config_state(require_literal_leading_dot));
-			app.manage(new_plugin_resources_state(app.app_handle().clone()));
+			app.manage(new_plugin_file_resources_state(app.app_handle().clone()));
 			Ok(())
 		})
 		.invoke_handler(tauri::generate_handler![
@@ -29,6 +29,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R, Option<config:
 			cmds::open_read_text_file_lines_stream,
 			cmds::open_write_file_stream,
 			cmds::close_all_file_streams,
+			cmds::count_all_file_streams,
 		])
 		.build()
 }

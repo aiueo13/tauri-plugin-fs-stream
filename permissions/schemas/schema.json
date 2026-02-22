@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the close_all_file_streams command without any pre-configured scope."
         },
         {
+          "description": "Enables the count_all_file_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-count-all-file-streams",
+          "markdownDescription": "Enables the count_all_file_streams command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the count_all_file_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-count-all-file-streams",
+          "markdownDescription": "Denies the count_all_file_streams command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open_read_file_stream command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-read-file-stream",

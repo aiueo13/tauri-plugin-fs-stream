@@ -10,7 +10,7 @@ pub async fn open_write_file_stream<R: tauri::Runtime>(
     webview: tauri::Webview<R>,
     cmd_scope: tauri::ipc::CommandScope<Scope>,
     global_scope: tauri::ipc::GlobalScope<Scope>,
-    resources: PluginResourcesState<'_, R>,
+    resources: PluginFileResourcesState<'_, R>,
     config: PluginConfigState<'_>,
 ) -> Result<OpenWriteFileStreamEventOutput> {
 
