@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { BaseDirectory } from '@tauri-apps/api/path'
+import { createReadableStream, createWritableStream } from 'create-web-stream'
 
 
 export type OpenReadFileStreamOptions = {
@@ -72,12 +73,12 @@ export async function openReadFileStream(
 
 	try {
 		await open()
-		return await createReadableStream(
+		return createReadableStream(
 			{
 				read: () => read(bufferByteLength),
-				release: close
+				release: () => close()
 			},
-			options?.signal
+			{ signal: options?.signal }
 		)
 	}
 	catch (e) {
@@ -340,13 +341,17 @@ export async function openWriteFileStream(
 
 	try {
 		await open()
-		return await createBufferedWritableStream(
+		return createWritableStream(
 			{
 				write,
 				release: close
 			},
-			bufferByteLength,
-			options?.signal
+			{
+				signal: options?.signal,
+				bufferSize: bufferByteLength,
+				useBufferView: true,
+				strictBufferSize: false,
+			}
 		)
 	}
 	catch (e) {
@@ -543,21 +548,6 @@ async function resolveWriteFileStreamEvents(
 	}
 }
 
-let _isReadableByteStreamAvailable: boolean | null = null
-function isReadableByteStreamAvailable() {
-	if (_isReadableByteStreamAvailable === null) {
-		try {
-			new ReadableStream({ type: "bytes" })
-			_isReadableByteStreamAvailable = true
-		}
-		catch {
-			_isReadableByteStreamAvailable = false
-		}
-	}
-
-	return _isReadableByteStreamAvailable
-}
-
 async function createTextLinesReadableStream(
 	handler: {
 		/** null か空で EOF。 */
@@ -700,238 +690,6 @@ async function createTextLinesReadableStream(
 		},
 
 		async cancel() {
-			await cleanup()
-		}
-	})
-}
-
-async function createReadableStream(
-	handler: {
-		/** null または空配列で EOF */
-		read: () => Promise<Uint8Array<ArrayBuffer> | null>,
-		release?: () => Promise<void>
-	},
-	signal?: AbortSignal
-): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
-
-	throwIfAborted(signal)
-
-	let abortListener: (() => void) | null = null
-	let buffer: Uint8Array<ArrayBuffer> | null = null
-
-	let cleanupPromise: Promise<void> | null = null
-	function cleanup(): Promise<void> {
-		if (cleanupPromise === null) {
-			cleanupPromise = (async () => {
-				buffer = null
-				if (signal != null && abortListener != null) {
-					signal.removeEventListener("abort", abortListener)
-					abortListener = null
-				}
-				if (handler.release) {
-					await handler.release()
-				}
-			})()
-		}
-		return cleanupPromise
-	}
-
-	if (!isReadableByteStreamAvailable()) {
-		return new ReadableStream({
-			start(controller) {
-				if (signal) {
-					abortListener = () => {
-						cleanup().catch(() => { })
-						controller.error(signal.reason ?? newAbortError())
-					}
-					signal.addEventListener("abort", abortListener);
-				}
-			},
-
-			async pull(controller) {
-				try {
-					throwIfAborted(signal)
-					const data = await handler.read()
-					throwIfAborted(signal)
-					if (data == null || data.byteLength === 0) {
-						await cleanup()
-						controller.close()
-						return
-					}
-
-					controller.enqueue(data)
-				}
-				catch (e) {
-					await cleanup().catch(() => { })
-					throw e
-				}
-			},
-
-			async cancel() {
-				await cleanup()
-			}
-		})
-	}
-
-	// autoAllocateChunkSize を指定すると stream.getReader() でも byob が使われるようになるが、
-	// この実装で byob を用いてもコピーが増えるだけで恩恵が少ないため指定しない。
-	// また type: "bytes" で strategy を指定すると (正確には size を定義すると) エラーになる点にも注意。
-	return new ReadableStream({
-		type: "bytes",
-
-		start(controller) {
-			if (signal) {
-				abortListener = () => {
-					cleanup().catch(() => { })
-					controller.error(signal.reason ?? newAbortError())
-				}
-				signal.addEventListener("abort", abortListener)
-			}
-		},
-
-		async pull(controller) {
-			try {
-				throwIfAborted(signal)
-				if (buffer == null || buffer.byteLength === 0) {
-					buffer = await handler.read()
-					throwIfAborted(signal)
-				}
-				if (buffer == null || buffer.byteLength === 0) {
-					await cleanup()
-
-					// byobRequest がある場合、respond を呼ばないと promise　が解決されない。
-					// controller.close() の後だと respond(0) を読んでもエラーにはならない。
-					// https://github.com/whatwg/streams/issues/1170
-					controller.close()
-					controller.byobRequest?.respond(0)
-					return
-				}
-
-				const byob = controller.byobRequest
-				// byobRequest がある場合、respond を呼ばないと promise　が解決されないことに注意
-				if (byob != null) {
-					// respond する前なので null にならない
-					const v = byob.view!!
-					const view = new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
-					const nread = Math.min(buffer.byteLength, view.byteLength)
-
-					view.set(buffer.subarray(0, nread))
-					buffer = buffer.subarray(nread)
-
-					throwIfAborted(signal)
-					byob.respond(nread)
-				}
-				else {
-					throwIfAborted(signal)
-					controller.enqueue(buffer)
-					buffer = null
-				}
-			}
-			catch (e) {
-				await cleanup().catch(() => { })
-
-				// byobRequest が存在する場合、controller.close() を呼んだだけでは
-				// Promise は解決されず、respond() も呼ぶ必要がある。
-				// controller.error() も同様の挙動になる可能性がある。(要検証)
-				// 少なくとも throw すれば Promise は解決されるため、現状はこの実装とする。
-				throw e
-			}
-		},
-
-		async cancel() {
-			await cleanup()
-		}
-	})
-}
-
-/**
- * chunk はクロージャーの中でのみ用いるべきであり、それ以降は参照すべきでない。
- * 必要な場合はコピーしてから用いる必要がある。
- */
-async function createBufferedWritableStream(
-	handler: {
-		write: (chunk: Uint8Array<ArrayBuffer>) => Promise<void>,
-		release?: () => Promise<void>
-	},
-	bufferSize: number,
-	signal?: AbortSignal,
-): Promise<WritableStream<Uint8Array<ArrayBufferLike>>> {
-
-	throwIfAborted(signal)
-
-	if (!Number.isSafeInteger(bufferSize) || bufferSize <= 0) {
-		throw new Error("bufferSize must be a positive safe integer")
-	}
-
-	let abortListener: (() => void) | null = null;
-	let buffer: Uint8Array<ArrayBuffer> | null = new Uint8Array(bufferSize)
-	let bufferOffset = 0;
-
-	let cleanupPromise: Promise<void> | null = null;
-	function cleanup(): Promise<void> {
-		if (cleanupPromise === null) {
-			cleanupPromise = (async () => {
-				buffer = null
-				if (signal != null && abortListener != null) {
-					signal.removeEventListener("abort", abortListener)
-					abortListener = null
-				}
-				if (handler.release) {
-					await handler.release()
-				}
-			})()
-		}
-		return cleanupPromise
-	}
-
-	return new WritableStream<Uint8Array<ArrayBufferLike>>({
-		start(controller) {
-			if (signal) {
-				abortListener = () => {
-					cleanup().catch(() => { })
-					controller.error(signal.reason ?? newAbortError())
-				}
-				signal.addEventListener("abort", abortListener);
-			}
-		},
-
-		async write(src) {
-			try {
-				if (buffer == null) throw new Error("Buffer missing")
-
-				let srcOffset = 0;
-				while (srcOffset < src.byteLength) {
-					throwIfAborted(signal)
-					const n = Math.min(bufferSize - bufferOffset, src.byteLength - srcOffset)
-					buffer.set(src.subarray(srcOffset, srcOffset + n), bufferOffset)
-					bufferOffset += n
-					srcOffset += n
-
-					if (bufferOffset === bufferSize) {
-						throwIfAborted(signal)
-						await handler.write(buffer)
-						bufferOffset = 0
-					}
-				}
-			}
-			catch (e) {
-				await cleanup().catch(() => { })
-				throw e
-			}
-		},
-
-		async close() {
-			try {
-				if (0 < bufferOffset && buffer != null) {
-					await handler.write(buffer.subarray(0, bufferOffset))
-				}
-			}
-			finally {
-				await cleanup()
-			}
-		},
-
-		async abort() {
 			await cleanup()
 		}
 	})
