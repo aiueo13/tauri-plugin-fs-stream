@@ -11,7 +11,7 @@ First, install this plugin to your Tauri project:
 
 ```toml
 [dependencies]
-tauri-plugin-fs-stream = "=0.7.1"
+tauri-plugin-fs-stream = "=2.0.0"
 ```
 
 Next, register this plugin in your Tauri project:
@@ -50,11 +50,11 @@ Then, set the APIs and file paths that can be used from the Javascript:
 Finally, install the JavaScript Guest bindings using whichever JavaScript package manager you prefer:
 
 ```bash
-pnpm add tauri-plugin-fs-stream-api@0.7.1 -E
+pnpm add tauri-plugin-fs-stream-api@2.0.0 -E
 # or
-npm install tauri-plugin-fs-stream-api@0.7.1 --save-exact
+npm install tauri-plugin-fs-stream-api@2.0.0 --save-exact
 # or
-yarn add tauri-plugin-fs-stream-api@0.7.1 --exact
+yarn add tauri-plugin-fs-stream-api@2.0.0 --exact
 ```
 
 **NOTE**: Please make sure that the Rust-side [`tauri-plugin-fs-stream`](https://crates.io/crates/tauri-plugin-fs-stream) and the JavaScript-side [`tauri-plugin-fs-stream-api`](https://www.npmjs.com/package/tauri-plugin-fs-stream-api?activeTab=readme) versions match exactly.
