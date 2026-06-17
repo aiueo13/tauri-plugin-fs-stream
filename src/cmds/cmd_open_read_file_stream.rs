@@ -21,16 +21,16 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
     
     match event {
         OpenReadFileStreamEventInput::Open { path, base_dir, freeze_size } => {
-            let path = resolve_path(
-                &webview,
-                &global_scope, 
-                &cmd_scope,
-                &config,
-                path,
-                base_dir
-            )?;
-            
             tauri::async_runtime::spawn_blocking(move || {
+                let path = resolve_path(
+                    &webview,
+                    &global_scope, 
+                    &cmd_scope,
+                    &config,
+                    path,
+                    base_dir
+                )?;
+                
                 let file = std::fs::File::open(&path)?;
                 let read_limit = match freeze_size {
                     true => Some(file.metadata()?.len()),
@@ -66,14 +66,11 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
 
 #[derive(serde::Deserialize)]
 #[serde(tag = "type")]
+#[serde(rename_all_fields = "camelCase")]
 pub enum OpenReadFileStreamEventInput {
     Open {
         path: tauri_plugin_fs::SafeFilePath,
-
-        #[serde(rename = "freezeSize")]
         freeze_size: bool,
-
-        #[serde(rename = "baseDir")]
         base_dir: Option<tauri::path::BaseDirectory>
     },
     Read {

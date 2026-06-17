@@ -2,7 +2,7 @@ Note: **I’m using a translation tool, so there may be some inappropriate expre
 
 # Overview
 
-This plugin provides commands that create `ReadableStream` and  `WritableStream` from a file path.
+This plugin provides APIs that create the WebAPI `ReadableStream` and  `WritableStream` from a file path.
 
 # Setup
 First, install this plugin to your Tauri project:
@@ -11,7 +11,7 @@ First, install this plugin to your Tauri project:
 
 ```toml
 [dependencies]
-tauri-plugin-fs-stream = "=2.0.0"
+tauri-plugin-fs-stream = "=2.0.1"
 ```
 
 Next, register this plugin in your Tauri project:
@@ -50,14 +50,17 @@ Then, set the APIs and file paths that can be used from the Javascript:
 Finally, install the JavaScript Guest bindings using whichever JavaScript package manager you prefer:
 
 ```bash
-pnpm add tauri-plugin-fs-stream-api@2.0.0 -E
+pnpm add tauri-plugin-fs-stream-api@2.0.1 -E
 # or
-npm install tauri-plugin-fs-stream-api@2.0.0 --save-exact
+npm install tauri-plugin-fs-stream-api@2.0.1 --save-exact
 # or
-yarn add tauri-plugin-fs-stream-api@2.0.0 --exact
+yarn add tauri-plugin-fs-stream-api@2.0.1 --exact
 ```
 
-**NOTE**: Please make sure that the Rust-side [`tauri-plugin-fs-stream`](https://crates.io/crates/tauri-plugin-fs-stream) and the JavaScript-side [`tauri-plugin-fs-stream-api`](https://www.npmjs.com/package/tauri-plugin-fs-stream-api?activeTab=readme) versions match exactly.
+**NOTE**: Please make sure that the Rust-side `tauri-plugin-fs-stream` and the JavaScript-side `tauri-plugin-fs-stream-api` versions match exactly.
+
+[![crates.io](https://img.shields.io/crates/v/tauri-plugin-fs-stream.svg?color=yellow)](https://crates.io/crates/tauri-plugin-fs-stream) [![npm version](https://img.shields.io/npm/v/tauri-plugin-fs-stream-api.svg?color=red)](https://www.npmjs.com/package/tauri-plugin-fs-stream-api)
+
 
 # API
 This plugin provides the following commands:

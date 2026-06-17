@@ -6,55 +6,68 @@ import { createReadableStream, createWritableStream } from 'create-web-stream'
 export type OpenReadFileStreamOptions = {
 
 	/**
-	 * The buffer size, in bytes, used when sending data from the backend to the frontend.
+	 * Buffer size, in bytes, used when sending data from the backend to the frontend.
 	 * 
-	 * IPC calls are relatively expensive, 
-	 * so larger buffer sizes are generally more efficient. 
-	 * But if it is too large, the UI may freeze or run out of memory.
+	 * @remarks
+	 * IPC calls are relatively expensive, so larger buffer sizes are generally more efficient. 
+	 * However, setting this value too high may cause the UI to freeze or result in out-of-memory errors.
 	 * 
-	 * Defaults to `524288` (512 KiB).
+	 * @defaultValue `524288` (512 KiB)
 	 */
 	bufferByteLength?: number,
 
 	/**
-	 * Indicates whether to limit the read stream to the file's size at the moment of opening.
+	 * Indicates whether to limit the read stream to the file size at the moment of opening.
+	 *
+	 * @remarks
+	 * This serves as a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
 	 * 
-	 * - `true`: The stream acts as a fixed snapshot. It stops reading exactly when the initial file size is reached. This is a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
-	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open, but is unsafe for self-copying operations.
-	 * 
-	 * Defaults to `true`.
+	 * The behavior is as follows:
+	 * - `true`: The stream acts as a fixed snapshot, stopping exactly when the initial file size is reached. 
+	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open.
+	 *
+	 * @default `true`
 	 */
 	freezeSize?: boolean,
 
 	/**
-	 * An `AbortSignal` that allows the read operation to be aborted.
+	 * `AbortSignal` that allows the read operation to be aborted.
 	 * 
+	 * @remarks
 	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
-	 * and the underlying file resources are released instantly.
+	 * and the underlying file resources are released immediately.
 	 */
 	signal?: AbortSignal,
 
 	/**
-	 * Base directory for `path`.
+	 * Base directory to resolve the relative `path` against.
 	 */
 	baseDir?: BaseDirectory
 }
 
 /**
- * Opens the file with read-only mode and resolves to a `ReadableStream`.  
+ * Opens a file in read-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/ReadableStream | ReadableStream}.
  * 
- * The returned `ReadableStream` must always be released by the caller.
- * Failure to do so may cause file resource leaks.
- * The returned ReadableStream is released in the following cases:
- * - When the ReadableStream or its Reader is canceled. 
- * - When the ReadableStream's Reader has been fully read. 
- * - When the ReadableStream's Reader's read operation ends with an error. 
- * - When the provided AbortSignal fires an abort event.
+ * @remarks
+ * The caller is responsible for releasing the returned stream.
+ * The stream is released in the following cases:
+ * - When the stream or its reader is canceled. 
+ * - When all data has been successfully read from the stream.
+ * - When a read operation fails with an error.
+ * - When the provided `AbortSignal` is aborted.
+ * - When `closeAllFileStreams` is called.
  * 
- * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for detailed descriptions of each item.
+ * @param path - File path or file scheme URL to read. 
+ * @param options - Optional settings: `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for details.
  * 
- * @returns A Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ * @returns Promise that resolves to a `ReadableStream<Uint8Array<ArrayBuffer>>` backed by the file opened in read-only mode. This stream maintains a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ * 
+ * @throws
+ * The returned Promise rejects with an error in the following cases:
+ * - When the entry is a directory, not a file.
+ * - When the file does not exist.
+ * - When the app does not have read permissions for the file.
+ * - When an unexpected error occurred.
  */
 export async function openReadFileStream(
 	path: string | URL,
@@ -63,16 +76,17 @@ export async function openReadFileStream(
 
 	throwIfAborted(options?.signal)
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
+	const baseDir = options?.baseDir
 	const freezeSize = options?.freezeSize ?? true
-	const { open, read, close } = await resolveReadFileStreamEvents(
-		"plugin:fs-stream|open_read_file_stream",
-		mapFsPathForInput(path),
-		{ baseDir: options?.baseDir, freezeSize }
-	)
-	throwIfAborted(options?.signal)
+	const { open, read, close } = resolveCmdReadFileStream("plugin:fs-stream|open_read_file_stream")
 
 	try {
-		await open()
+		await open({
+			path: mapFsPathForInput(path),
+			baseDir,
+			freezeSize,
+		})
+
 		return createReadableStream(
 			{
 				read: () => read(bufferByteLength),
@@ -91,81 +105,96 @@ export async function openReadFileStream(
 export type OpenReadTextFileLinesStreamOptions = {
 
 	/**
-	 * Text encoding label for decoder, such as `"utf-8"`, `"shift_jis"`, `"iso-8859-2"`. 
-	 *  
-	 * This is passed to [`TextDecoder constructor`](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder).
-	 * See: [the available encodings](https://developer.mozilla.org/ja/docs/Web/API/Encoding_API/Encodings).
+	 * Text encoding used to decode the data, such as `"utf-8"`, `"shift_jis"`, or `"iso-8859-2"`.
 	 * 
-	 * Defaults to `"utf-8"`.
+	 * @see {@link https://developer.mozilla.org/ja/docs/Web/API/Encoding_API/Encodings | available encodings}
+	 * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder#label | TextDecoder's label option}
+	 * 
+	 * @defaultValue `"utf-8"`.
 	 */
 	encoding?: string,
 
 	/**
-	 * Indicates whether decoding errors should be treated as fatal.
+	 * Indicates whether decoding errors are treated as fatal.
 	 *
+	 * @remarks
+	 * The behavior is as follows:
 	 * - `false`: Invalid byte sequences are replaced with U+FFFD (`�`) and decoding continues.
-	 * - `true`: A `TypeError` is thrown when an invalid byte sequence is encountered.
+	 * - `true`: An error is thrown when an invalid byte sequence is encountered.
+	 * 
+	 * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder#fatal | WebAPI TextDecoder's fatal option}
 	 *
-	 * This is passed to [`TextDecoder constructor`](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder).
-	 *
-	 * Defaults to `false`.
+	 * @defaultValue `false`
 	 */
 	fatal?: boolean,
 
 	/**
 	 * Indicates whether to ignore a leading BOM (Byte Order Mark).
 	 *
-	 * - `false`: A leading BOM is automatically stripped from the decoded result.
-	 * - `true`: A leading BOM is preserved and treated as a normal character.
+	 * @remarks
+	 * The behavior is as follows:
+	 * - `false`: The leading BOM is automatically stripped from the decoded result.
+	 * - `true`: The leading BOM is preserved as a regular character.
+	 * 
+	 * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder#ignorebom | WebAPI TextDecoder's ignoreBOM option}
 	 *
-	 * Defaults to `false`.
+	 * @defaultValue `false`
 	 */
 	ignoreBOM?: boolean,
 
 	/**
-	 * The buffer size, in bytes, used when sending data from the backend to the frontend.
+	 * Buffer size, in bytes, used when sending data from the backend to the frontend.
 	 * 
-	 * IPC calls are relatively expensive, 
-	 * so larger buffer sizes are generally more efficient. 
-	 * But if it is too large, the UI may freeze or run out of memory.
+	 * @remarks
+	 * IPC calls are relatively expensive, so larger buffer sizes are generally more efficient. 
+	 * However, setting this value too high may cause the UI to freeze or result in out-of-memory errors.
 	 * 
-	 * This value is not guaranteed to be strictly respected. 
-	 * If a single line exceeds this size, 
-	 * more bytes may be sent in a single IPC transmission.
+	 * This value is not guaranteed to be strictly respected.
+	 * If a single line exceeds this size, more bytes may be sent in a single IPC transmission.
+	 * To prevent OOM errors, use `maxLineByteLength`.
 	 * 
-	 * Defaults to `524288` (512 KiB).
+	 * @defaultValue `524288` (512 KiB)
 	 */
 	bufferByteLength?: number,
 
 	/**
-	 * The maximum byte length of a line before decoding, excluding line break characters and an initial BOM (if present). 
+	 * Maximum byte length of a line before decoding.
+	 * 
+	 * @remarks
 	 * If a line exceeds this limit, an error is thrown. 
 	 * This prevents OOM errors when reading minified files or binaries.
 	 * 
-	 * Defaults to `0` (unlimited).
+	 * This excluding line break characters and the initial BOM (if present). 
+	 * 
+	 * @defaultValue `0` (unlimited)
 	 */
 	maxLineByteLength?: number,
 
 	/**
-	 * Indicates whether to limit the read stream to the file's size at the moment of opening.
+	 * Indicates whether to limit the read stream to the file size at the moment of opening.
+	 *
+	 * @remarks
+	 * This serves as a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
 	 * 
-	 * - `true`: The stream acts as a fixed snapshot. It stops reading exactly when the initial file size is reached. This is a safety mechanism to prevent infinite loops if the stream is piped back into the same file (read/write cycle).
-	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open, but is unsafe for self-copying operations.
-	 * 
-	 * Defaults to `true`.
+	 * The behavior is as follows:
+	 * - `true`: The stream acts as a fixed snapshot, stopping exactly when the initial file size is reached. 
+	 * - `false`: The stream reads until the underlying file returns EOF. This allows reading data appended to the file while the stream is open.
+	 *
+	 * @default `true`
 	 */
 	freezeSize?: boolean,
 
 	/**
-	 * An `AbortSignal` that allows the read operation to be aborted.
+	 * `AbortSignal` that allows the read operation to be aborted.
 	 * 
+	 * @remarks
 	 * When aborted, the stream enters an errored state, all subsequent read operations fail,
-	 * and the underlying file resources are released instantly.
+	 * and the underlying file resources are released immediately.
 	 */
 	signal?: AbortSignal,
 
 	/**
-	 * Base directory for `path`.
+	 * Base directory to resolve the relative `path` against.
 	 */
 	baseDir?: BaseDirectory,
 }
@@ -173,40 +202,52 @@ export type OpenReadTextFileLinesStreamOptions = {
 export type OpenReadTextFileLinesStreamItem = {
 
 	/**
-	 * A text of the current line, excluding line break characters.
+	 * Text of the current line.
 	 * 
-	 * If you need it, use `lineBreak`.
+	 * @remarks
+	 * This value excludes line break characters.
+	 * If needed, use `lineBreak`.
 	 */
 	line: string,
 
 	/**
-	 * Line break characters used at the end of the current line.  
+	 * Line break characters at the end of the current line.
+	 * 
+	 * @remarks
 	 * One of: `"\n"`, `"\r\n"`, `null`.
 	 * 
-	 * This value is `null`
-	 * if the current line is last and the file does not end with a line break.
+	 * This value is `null` 
+	 * if the current line is the last line and does not end with a line break.
 	 */
 	lineBreak: "\n" | "\r\n" | null
 }
 
 /**
- * Opens the file with read-only mode and resolves to a `ReadableStream` of text lines. 
- *  
- * The stream yields decoded text line by line.   
- * See: `OpenReadTextFileLinesStreamItem`.
+ * Opens a text file in read-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/ReadableStream | ReadableStream} of text lines.
  * 
- * The returned `ReadableStream` must always be released by the caller.
- * Failure to do so may cause file resource leaks.
- * The returned ReadableStream is released in the following cases:
- * - When the ReadableStream or its Reader is canceled. 
- * - When the ReadableStream's Reader has been fully read. 
- * - When the ReadableStream's Reader's read operation ends with an error. 
- * - When the provided AbortSignal fires an abort event.
+ * @remarks
+ * The returned stream yields decoded text line by line.
+ * For the structure of each item, see `OpenReadTextFileLinesStreamItem`.
  * 
- * @param path - The file path or file scheme URL to read. 
- * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for detailed descriptions of each item.
+ * The caller is responsible for releasing the returned stream.
+ * The stream is released in the following cases:
+ * - When the stream or its reader is canceled. 
+ * - When all data has been successfully read from the stream.
+ * - When a read operation fails with an error. 
+ * - When the provided `AbortSignal` is aborted.
+ * - When `closeAllFileStreams` is called.
+ *
+ * @param uri - File path or file scheme URL to read. 
+ * @param options - Optional settings: `encoding`, `fatal`, `ignoreBOM`, `maxLineByteLength`, `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadTextFileLinesStreamOptions` for details.
  * 
- * @returns A Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ * @returns Promise that resolves to a `ReadableStream<OpenReadTextFileLinesStreamItem>` backed by the file opened in read-only mode. This stream maintains a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ *
+ * @throws 
+ * The returned Promise rejects with an error in the following cases:
+ * - When the entry is a directory, not a file.
+ * - When the file does not exist.
+ * - When the app does not have read permissions for the file.
+ * - When an unexpected error occurred.
  */
 export async function openReadTextFileLinesStream(
 	path: string | URL,
@@ -217,19 +258,23 @@ export async function openReadTextFileLinesStream(
 	const maxLineByteLength = mapMaxLineByteLength(options?.maxLineByteLength)
 	const bufferSize = mapBufferByteLengthForInput(options?.bufferByteLength)
 	const label = mapEncodingLabelForInput(options?.encoding)
+	const baseDir = options?.baseDir
+	const freezeSize = options?.freezeSize ?? true
 	const fatal = options?.fatal ?? false
 	const ignoreBOM = options?.ignoreBOM ?? false
-	const freezeSize = options?.freezeSize ?? true
-	const { open, read, close } = await resolveReadFileStreamEvents(
-		"plugin:fs-stream|open_read_text_file_lines_stream",
-		mapFsPathForInput(path),
-		{ baseDir: options?.baseDir, freezeSize }
-	)
-	throwIfAborted(options?.signal)
+	const { open, read, close } = resolveCmdReadFileStream("plugin:fs-stream|open_read_text_file_lines_stream")
 
 	try {
-		await open({ label, maxLineByteLength, ignoreBOM })
-		return await createTextLinesReadableStream(
+		await open({
+			path: mapFsPathForInput(path),
+			baseDir,
+			freezeSize,
+			maxLineByteLength,
+			ignoreBOM,
+			label,
+		})
+
+		return createTextLinesReadableStream(
 			{
 				read: () => read(bufferSize),
 				release: close
@@ -248,75 +293,94 @@ export async function openReadTextFileLinesStream(
 export type OpenWriteFileStreamOptions = {
 
 	/**
-	 * The buffer size, in bytes, used when sending data from the frontend to the backend.
+	 * Buffer size, in bytes, used when sending data from the frontend to the backend.
 	 * 
-	 * IPC calls are relatively expensive, 
-	 * so larger buffer sizes are generally more efficient. 
-	 * But if it is too large, the UI may freeze or run out of memory.
+	 * @remarks
+	 * IPC calls are relatively expensive, so larger buffer sizes are generally more efficient. 
+	 * However, setting this value too high may cause the UI to freeze or result in out-of-memory errors.
 	 * 
-	 * Defaults to `524288` (512 KiB).
+	 * @defaultValue `524288` (512 KiB)
 	 */
 	bufferByteLength?: number,
 
 	/**
-	 * An `AbortSignal` that allows the write operation to be aborted.
+	 * `AbortSignal` that allows the write operation to be aborted.
 	 * 
+	 * @remarks
 	 * When aborted, the stream enters an errored state, all subsequent write operations fail,
-	 * and the underlying file resources are released instantly.
+	 * and the underlying file resources are released immediately.
 	 */
 	signal?: AbortSignal,
 
 	/**
-	 * Indicates whether the data should be appended from the end of the file instead of overwriting the existing content.
+	 * Indicates whether to append data to the end of the file.
 	 * 
-	 * Defaults to `false`.
+	 * @remarks
+	 * The behavior is as follows:
+	 * - `true`: Preserves the existing data and writes the new data to the end of the file.
+	 * - `false`: Truncates the existing data and writes the new data.
+	 * 
+	 * @defaultValue `false`
 	 */
 	append?: boolean,
 
 	/**
-	 * Indicates whether a new file should be created if it does not exist.
-	 * 
-	 * Defaults to `true`.
+	 * Indicates whether to create a new file if it does not exist.
+	 *
+	 * @defaultValue `true`
 	 */
 	create?: boolean,
 
 	/**
 	 * Indicates whether a new file must be created. 
-	 * In other words, whether an error should be raised if the file already exists.
 	 * 
-	 * Defaults to `false`.
+	 * @remarks
+	 * If set to `true`, the operation will fail with an error if the file already exists.
+	 * 
+	 * @defaultValue `false`
 	 */
 	createNew?: boolean,
 
 	/**
-	 * The file mode bits for creating a new file.
-	 * Ignored on Windows.
+	 * File mode bits (permissions) applied when creating a new file.
 	 * 
-	 * See: <https://doc.rust-lang.org/std/os/unix/fs/trait.OpenOptionsExt.html#tymethod.mode>
+	 * @remarks
+	 * This option is ignored on Windows.
+	 * 
+	 * @see {@link https://doc.rust-lang.org/std/os/unix/fs/trait.OpenOptionsExt.html#tymethod.mode | std::os::unix::fs::OpenOptionsExt::mode}
 	 */
 	mode?: number,
 
 	/**
-	 * Base directory for `path`.
+	 * Base directory to resolve the relative `path` against.
 	 */
 	baseDir?: BaseDirectory
 }
 
 /**
- * Opens the file with write-only mode and resolves to a `WritableStream`.  
+ * Opens a file in write-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/WritableStream | WritableStream}.  
  * 
- * The returned `WritableStream` must always be released by the caller.
- * Failure to do so may cause file resource leaks.
- * The returned WritableStream is released in the following cases:
- * - When the WritableStream or its Writer is closed. 
- * - When the WritableStream or its Writer is aborted. 
- * - When the WritableStream's Writer's write operation ends with an error. 
- * - When the provided AbortSignal fires an abort event.
+ * @remarks
+ * The caller is responsible for releasing the returned stream.
+ * The stream is released in the following cases:
+ * - When the stream or its writer is closed.
+ * - When the stream or its writer is aborted.
+ * - When a write operation fails with an error.
+ * - When the provided `AbortSignal` is aborted.
+ * - When `closeAllFileStreams` is called.
  * 
- * @param path - The file path or file scheme URL write to. 
- * @param options - Optional settings: `bufferByteLength`, `signal`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for detailed descriptions of each item.
+ * @param uri - File path or file scheme URL write to. 
+ * @param options - Optional settings: `bufferByteLength`, `signal`, `append`, `create`, `createNew`, `mode`, `baseDir`. See `OpenWriteFileStreamOptions` for details.
  * 
- * @returns A Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream has a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ * @returns Promise that resolves to a `WritableStream<Uint8Array<ArrayBufferLike>>` backed by the file opened in write-only mode. This stream maintains a one-to-one correspondence with the OS handle (file descriptor on Unix or file handle on Windows).
+ *
+ * @throws
+ * The returned Promise rejects with an error in the following cases:
+ * - When the entry is a directory, not a file.
+ * - When the app does not have write permissions for the file.
+ * - When `options.create` is `false`, and the file does not exist.
+ * - When `options.createNew` is `true`, and the file already exists.
+ * - When an unexpected error occurred.
  */
 export async function openWriteFileStream(
 	path: string | URL,
@@ -325,22 +389,20 @@ export async function openWriteFileStream(
 
 	throwIfAborted(options?.signal)
 	const bufferByteLength = mapBufferByteLengthForInput(options?.bufferByteLength)
-	const fileOptions = {
-		append: options?.append ?? false,
-		create: options?.create ?? true,
-		createNew: options?.createNew ?? false,
-		mode: options?.mode,
-		baseDir: options?.baseDir
-	}
-	const { open, write, close } = await resolveWriteFileStreamEvents(
-		"plugin:fs-stream|open_write_file_stream",
-		mapFsPathForInput(path),
-		fileOptions,
-	)
-	throwIfAborted(options?.signal)
+	const { open, write, close } = resolveCmdWriteFileStream("plugin:fs-stream|open_write_file_stream")
 
 	try {
-		await open()
+		await open({
+			path: mapFsPathForInput(path),
+			baseDir: options?.baseDir,
+			openOptions: {
+				append: options?.append ?? false,
+				create: options?.create ?? true,
+				createNew: options?.createNew ?? false,
+				mode: options?.mode,
+			}
+		})
+
 		return createWritableStream(
 			{
 				write,
@@ -364,21 +426,38 @@ export async function openWriteFileStream(
 /**
  * Forcibly disposes of all file streams.
  *
- * All backend file resources owned by file stream instances 
- * created by this plugin are detached from frontend and released.
+ * @remarks
+ * All backend file resources owned by stream instances
+ * created by this plugin are disconnected from the frontend and released.
  * 
- * After this operation, any read or write operation on existing streams will result in an error, 
- * except for buffering on the frontend.
+ * After this operation,
+ * any read or write attempts on existing streams will result in an error, 
+ * except for buffering in the frontend.
+ * 
+ * This affects streams created by the following methods:
+ * - `openReadFileStream`
+ * - `openReadTextFileLinesStream`
+ * - `openWriteFileStream`
+ * 
+ * @returns Promise that resolves when the operation completes successfully.
  */
 export async function closeAllFileStreams(): Promise<void> {
 	await invoke("plugin:fs-stream|close_all_file_streams")
 }
 
 /**
- * Retrieves the number of all currently active file streams.
- *
- * This counts all backend file resources owned by file stream instances
- * created by this plugin that have not yet been detached from frontend and released.
+ * Retrieves the number of currently active file streams.
+ * 
+ * @remarks
+ * This counts all backend file resources owned by stream instances created by this plugin
+ * that have not yet been disconnected from the frontend and released.
+ * 
+ * This applies to streams created by the following methods:
+ * - `openReadFileStream`
+ * - `openReadTextFileLinesStream`
+ * - `openWriteFileStream`
+ * 
+ * @returns Promise that resolves to a number of currently active file streams.
  */
 export async function countAllFileStreams(): Promise<number> {
 	return await invoke("plugin:fs-stream|count_all_file_streams")
@@ -419,136 +498,114 @@ function mapFsPathForInput(path: string | URL): string {
 	return path instanceof URL ? path.toString() : path
 }
 
-type ReadFileStreamEvents = {
-	open: (options?: Record<any, any>) => Promise<void>
-	read: (len: number, options?: Record<any, any>) => Promise<Uint8Array<ArrayBuffer> | null>,
-	close: (options?: Record<any, any>) => Promise<void>,
+type CmdReadFileStreamHandler = {
+	open: (args: Record<string, unknown>) => Promise<void>
+	read: (len: number) => Promise<Uint8Array<ArrayBuffer> | null>,
+	close: () => Promise<void>,
 }
-async function resolveReadFileStreamEvents(
-	cmd: string,
-	path: string,
-	options: {
-		baseDir?: BaseDirectory,
-		freezeSize: boolean
-	}
-): Promise<ReadFileStreamEvents> {
-
+function resolveCmdReadFileStream(cmdName: string): CmdReadFileStreamHandler {
+	// Tauri IPC の制約により、戻り値は全て ArrayBuffer 型となる。
 	type CmdEvents = {
-		Open: { path: string, baseDir?: BaseDirectory, freezeSize: boolean },
+		Open: Record<string, unknown>,
 		Read: { id: number, len: number },
 		Close: { id: number },
 	}
 	type CmdType = keyof CmdEvents
 	type CmdInput<T extends CmdType> = CmdEvents[T]
-	function dispatch<T extends CmdType>(type: T, input: CmdInput<T>): Promise<ArrayBuffer> {
-		return invoke(cmd, { event: { type, ...input } })
+	function cmd<T extends CmdType>(type: T, input: CmdInput<T>): Promise<ArrayBuffer> {
+		return invoke(cmdName, { event: { type, ...input } })
 	}
 
 
-	let id: number | null = null
+	let id: Promise<number> | null = null
 
 	return {
-		open: async (ops) => {
+		open: async (args) => {
 			if (id !== null) throw new Error("File already opened")
-			const idBytes = await dispatch("Open", {
-				...ops,
-				path,
-				freezeSize: options.freezeSize,
-				baseDir: options.baseDir
-			})
-			id = ridFromBytes(idBytes)
+			id = cmd("Open", args).then(ridFromBytes)
+			await id
 		},
 
-		read: async (len, ops) => {
+		read: async (len) => {
 			if (id === null) throw new Error("File not opened")
-			const data = await dispatch("Read", { ...ops, id, len, })
+			const data = await cmd("Read", { id: await id, len, })
 			return data.byteLength === 0 ? null : new Uint8Array(data)
-		},
-
-		close: async (ops) => {
-			if (id === null) return
-			await dispatch("Close", { ...ops, id })
-		}
-	}
-}
-
-type WriteFileStreamEvents = {
-	open: () => Promise<void>,
-	write: (data: Uint8Array<ArrayBufferLike>) => Promise<void>,
-	close: () => Promise<void>,
-}
-async function resolveWriteFileStreamEvents(
-	cmd: string,
-	path: string,
-	options: {
-		append: boolean,
-		create: boolean,
-		createNew: boolean,
-		mode?: number,
-		baseDir?: BaseDirectory
-	}
-): Promise<WriteFileStreamEvents> {
-
-	type CmdEvents = {
-		Open: { body: Uint8Array, headers: { path: string, options: string }, out: { id: number, supportsRawIpcRequestBody: boolean } },
-		Write: { body: Uint8Array | { data: string }, headers: { id: string }, out: void },
-		Close: { body: {}, headers: { id: string }, out: void },
-	}
-	type CmdType = keyof CmdEvents
-	type CmdInputBody<T extends CmdType> = CmdEvents[T]["body"]
-	type CmdInputHeaders<T extends CmdType> = CmdEvents[T]["headers"]
-	type CmdOutput<T extends CmdType> = CmdEvents[T]["out"]
-	function dispatch<T extends CmdType>(type: T, body: CmdInputBody<T>, headers: CmdInputHeaders<T>): Promise<CmdOutput<T>> {
-		return invoke(cmd, body, { headers: { eventType: type, ...headers } })
-	}
-
-
-	const PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPROTED = new Uint8Array([0]);
-
-	let id: string | null = null
-	let supportsRawIpcRequestBody: boolean | null = null
-
-	return {
-		open: async () => {
-			if (id !== null) throw new Error("File already opened")
-
-			const res = await dispatch("Open",
-				PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPROTED,
-				{
-					path: encodeURIComponent(path),
-					options: encodeURIComponent(JSON.stringify(options))
-				}
-			)
-
-			supportsRawIpcRequestBody = res.supportsRawIpcRequestBody
-			id = res.id.toString()
-		},
-
-		write: async (chunk) => {
-			if (id === null) throw new Error("File not opened")
-			if (supportsRawIpcRequestBody === null) throw new Error("Missing value: supportsRawIpcRequestBody")
-
-			if (supportsRawIpcRequestBody) {
-				await dispatch("Write", chunk, { id })
-			}
-			// IPC のリクエストで raw Body を送れない場合、
-			// 大きな配列に対して非常に非効率な形式にシリアライズされる。
-			// よって、まだマシな dataURL としてデータを送る。
-			// Data URL を用いる理由は web API の FileReader で比較的効率的に作成できるため。
-			// <https://github.com/tauri-apps/tauri/issues/10573>
-			else {
-				await dispatch("Write", { data: await bytesToDataUrl(chunk) }, { id })
-			}
 		},
 
 		close: async () => {
 			if (id === null) return
-			await dispatch("Close", {}, { id })
+			await cmd("Close", { id: await id })
+		}
+	}
+}
+
+type CmdWriteFileStreamHandler = {
+	open: (args: Record<string, unknown>) => Promise<void>,
+	write: (data: Uint8Array<ArrayBufferLike>) => Promise<void>,
+	close: () => Promise<void>,
+}
+function resolveCmdWriteFileStream(cmdName: string): CmdWriteFileStreamHandler {
+	// Tauri IPC の制約により、大きいバイトを送る際は body で、それ以外の値は headers で送信する。
+	type CmdEvents = {
+		Open: { in: { body: Uint8Array, args: Record<string, unknown> }, out: { id: number, supportsRawIpcRequestBody: boolean } },
+		Write: { in: { body: Uint8Array | { data: string }, args: { id: number } }, out: void },
+		Close: { in: { body: {}, args: { id: number } }, out: void },
+	}
+	type CmdType = keyof CmdEvents
+	type CmdInputBody<T extends CmdType> = CmdEvents[T]["in"]["body"]
+	type CmdInputArgs<T extends CmdType> = CmdEvents[T]["in"]["args"]
+	type CmdOutput<T extends CmdType> = CmdEvents[T]["out"]
+	function cmd<T extends CmdType>(type: T, body: CmdInputBody<T>, args: CmdInputArgs<T>): Promise<CmdOutput<T>> {
+		return invoke(cmdName, body, {
+			headers: {
+				"tfps-cmd-type": type,
+				"tfps-cmd-args": encodeURIComponent(JSON.stringify(args))
+			}
+		})
+	}
+
+
+	const PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPORTED = new Uint8Array([0]);
+
+	let state: Promise<{ id: number, supportsRawIpcRequestBody: boolean }> | null = null
+
+	return {
+		open: async (args) => {
+			if (state !== null) throw new Error("File already opened")
+			state = cmd(
+				"Open",
+				PAYLOAD_FOR_CHECKING_RAW_IPC_REQUEST_BODY_SUPPORTED,
+				args
+			)
+			await state
+		},
+
+		write: async (chunk) => {
+			if (state === null) throw new Error("File not opened")
+			const { id, supportsRawIpcRequestBody } = await state
+
+			if (supportsRawIpcRequestBody) {
+				await cmd("Write", chunk, { id })
+			}
+			else {
+				// IPC のリクエストで raw Body を送れない場合、
+				// 大きな配列に対して非常に非効率な形式にシリアライズされる。
+				// よって、まだマシな dataURL としてデータを送る。
+				// Data URL を用いる理由は web API の FileReader で比較的効率的に作成できるため。
+				// <https://github.com/tauri-apps/tauri/issues/10573>
+				await cmd("Write", { data: await bytesToDataUrl(chunk) }, { id })
+			}
+		},
+
+		close: async () => {
+			if (state === null) return
+			const { id } = await state
+			await cmd("Close", {}, { id })
 		},
 	}
 }
 
-async function createTextLinesReadableStream(
+function createTextLinesReadableStream(
 	handler: {
 		/** null か空で EOF。 */
 		read: () => Promise<Uint8Array<ArrayBuffer> | null>,
@@ -559,10 +616,10 @@ async function createTextLinesReadableStream(
 		label?: string,
 	},
 	signal?: AbortSignal
-): Promise<ReadableStream<{
+): ReadableStream<{
 	line: string,
 	lineBreak: "\n" | "\r\n" | null
-}>> {
+}> {
 
 	throwIfAborted(signal)
 
