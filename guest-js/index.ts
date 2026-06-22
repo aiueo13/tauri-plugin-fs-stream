@@ -46,7 +46,7 @@ export type OpenReadFileStreamOptions = {
 }
 
 /**
- * Opens a file in read-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/ReadableStream | ReadableStream}.
+ * Opens a file in read-only mode and resolves to a {@link https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream | ReadableStream}.
  * 
  * @remarks
  * The caller is responsible for releasing the returned stream.
@@ -110,7 +110,7 @@ export type OpenReadTextFileLinesStreamOptions = {
 	/**
 	 * Text encoding used to decode the data, such as `"utf-8"`, `"shift_jis"`, or `"iso-8859-2"`.
 	 * 
-	 * @see {@link https://developer.mozilla.org/ja/docs/Web/API/Encoding_API/Encodings | available encodings}
+	 * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/Encoding_API/Encodings | available encodings}
 	 * @see {@link https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/TextDecoder#label | TextDecoder's label option}
 	 * 
 	 * @defaultValue `"utf-8"`.
@@ -226,7 +226,7 @@ export type OpenReadTextFileLinesStreamItem = {
 }
 
 /**
- * Opens a text file in read-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/ReadableStream | ReadableStream} of text lines.
+ * Opens a text file in read-only mode and resolves to a {@link https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream | ReadableStream} of text lines.
  * 
  * @remarks
  * The returned stream yields decoded text line by line.
@@ -361,7 +361,7 @@ export type OpenWriteFileStreamOptions = {
 }
 
 /**
- * Opens a file in write-only mode and resolves to a {@link https://developer.mozilla.org/ja/docs/Web/API/WritableStream | WritableStream}.  
+ * Opens a file in write-only mode and resolves to a {@link https://developer.mozilla.org/en-US/docs/Web/API/WritableStream | WritableStream}.  
  * 
  * @remarks
  * The caller is responsible for releasing the returned stream.
