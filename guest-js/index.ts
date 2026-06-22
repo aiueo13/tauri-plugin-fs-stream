@@ -54,8 +54,11 @@ export type OpenReadFileStreamOptions = {
  * - When the stream or its reader is canceled. 
  * - When all data has been successfully read from the stream.
  * - When a read operation fails with an error.
- * - When the provided `AbortSignal` is aborted.
+ * - When an abort event is received from the provided `AbortSignal`.
  * - When `closeAllFileStreams` is called.
+ * 
+ * The stream provides a {@link https://developer.mozilla.org/en-US/docs/Web/API/ReadableStreamDefaultReader | ReadableStreamDefaultReader}
+ * and a {@link https://developer.mozilla.org/en-US/docs/Web/API/ReadableStreamBYOBReader | ReadableStreamBYOBReader}.
  * 
  * @param path - File path or file scheme URL to read. 
  * @param options - Optional settings: `bufferByteLength`, `signal`, `freezeSize`, `baseDir`. See `OpenReadFileStreamOptions` for details.
@@ -234,7 +237,7 @@ export type OpenReadTextFileLinesStreamItem = {
  * - When the stream or its reader is canceled. 
  * - When all data has been successfully read from the stream.
  * - When a read operation fails with an error. 
- * - When the provided `AbortSignal` is aborted.
+ * - When an abort event is received from the provided `AbortSignal`.
  * - When `closeAllFileStreams` is called.
  *
  * @param uri - File path or file scheme URL to read. 
@@ -366,7 +369,7 @@ export type OpenWriteFileStreamOptions = {
  * - When the stream or its writer is closed.
  * - When the stream or its writer is aborted.
  * - When a write operation fails with an error.
- * - When the provided `AbortSignal` is aborted.
+ * - When an abort event is received from the provided `AbortSignal`.
  * - When `closeAllFileStreams` is called.
  * 
  * @param uri - File path or file scheme URL write to. 
@@ -438,6 +441,9 @@ export async function openWriteFileStream(
  * - `openReadFileStream`
  * - `openReadTextFileLinesStream`
  * - `openWriteFileStream`
+ * 
+ * This is intended for debugging or testing. 
+ * Instead, use the stream's APIs or abort the associated {@link https://developer.mozilla.org/en-US/docs/Web/API/AbortController | AbortController}.
  * 
  * @returns Promise that resolves when the operation completes successfully.
  */
@@ -511,9 +517,9 @@ function resolveCmdReadFileStream(cmdName: string): CmdReadFileStreamHandler {
 		Close: { id: number },
 	}
 	type CmdType = keyof CmdEvents
-	type CmdInput<T extends CmdType> = CmdEvents[T]
-	function cmd<T extends CmdType>(type: T, input: CmdInput<T>): Promise<ArrayBuffer> {
-		return invoke(cmdName, { event: { type, ...input } })
+	type CmdArgs<T extends CmdType> = CmdEvents[T]
+	function cmd<T extends CmdType>(type: T, args: CmdArgs<T>): Promise<ArrayBuffer> {
+		return invoke(cmdName, { event: { type, args } })
 	}
 
 

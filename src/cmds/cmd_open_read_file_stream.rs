@@ -65,7 +65,7 @@ pub async fn open_read_file_stream<R: tauri::Runtime>(
 
 
 #[derive(serde::Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "args")]
 #[serde(rename_all_fields = "camelCase")]
 pub enum OpenReadFileStreamEventInput {
     Open {
